@@ -63,6 +63,28 @@ export const mesaService = {
         return true
     },
 
+    async setMesaEstado(id: string, estado: Mesa['estado']) {
+        const { error } = await supabase
+            .from('mesas')
+            .update({ estado })
+            .eq('id', id)
+
+        if (error) throw error
+        return true
+    },
+
+    async resetMesa(mesaId: string) {
+        // 1. Cancelar pedidos pendientes de esa mesa
+        await supabase
+            .from('pedidos')
+            .update({ estado: 'cancelado' })
+            .eq('mesa_id', mesaId)
+            .neq('estado', 'facturado')
+
+        // 2. Liberar mesa
+        return this.setMesaEstado(mesaId, 'libre')
+    },
+
     subscribeToMesas(callback: (payload: any) => void) {
         return supabase
             .channel('mesas_changes')

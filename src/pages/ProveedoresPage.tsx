@@ -2,7 +2,6 @@ import { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { proveedoresService, type Proveedor } from '../services/proveedoresService'
 import { Building2, Plus, Edit2, Trash2, Save, X } from 'lucide-react'
-import { cn } from '../lib/utils'
 
 export function ProveedoresPage() {
     const { empresa } = useAuth()
@@ -52,7 +51,7 @@ export function ProveedoresPage() {
             setEditingProveedor(null)
         } catch (error: any) {
             console.error('Error saving proveedor:', error)
-            alert(`Error al guardar: ${error.message}`)
+            alert(`Error al guardar: ${error.message} `)
         } finally {
             setSaving(false)
         }
@@ -66,7 +65,7 @@ export function ProveedoresPage() {
             await loadProveedores()
         } catch (error: any) {
             console.error('Error deleting proveedor:', error)
-            alert(`Error al eliminar: ${error.message}`)
+            alert(`Error al eliminar: ${error.message} `)
         }
     }
 

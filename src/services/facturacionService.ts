@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase'
 import { sriService } from './sriService'
 import { emailService } from './emailService'
+import { kardexService } from './kardexService'
 
 export interface Cliente {
     id: string
@@ -195,7 +196,16 @@ export const facturacionService = {
                 await supabase.from('mesas').update({ estado: 'libre' }).eq('id', pedido.mesa_id)
             }
 
-            // 4. Enviar Correo
+            // 4. Salida de Kardex (Inventario)
+            if (pedido.pedido_detalles && pedido.pedido_detalles.length > 0) {
+                try {
+                    await kardexService.generarSalidaVenta(pedido.empresa_id, pedido.id, pedido.pedido_detalles)
+                } catch (kardexErr) {
+                    console.error('Error al registrar salida en Kardex:', kardexErr)
+                }
+            }
+
+            // 5. Enviar Correo
             const { data: cliente } = await supabase.from('clientes').select('email').eq('id', clienteId).single()
             if (cliente?.email) {
                 emailService.enviarComprobante(cliente.email, factura).catch(err => {

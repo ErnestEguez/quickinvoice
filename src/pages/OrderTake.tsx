@@ -35,7 +35,7 @@ export function OrderTake() {
     const [loading, setLoading] = useState(true)
     const [submitting, setSubmitting] = useState(false)
     const [existingPedido, setExistingPedido] = useState<any>(null)
-    const { user, empresa } = useAuth()
+    const { user, empresa, activeStaff } = useAuth()
 
     useEffect(() => {
         if (mesaId) {
@@ -111,7 +111,7 @@ export function OrderTake() {
                 // Crear nuevo pedido
                 const pedido = await pedidoService.crearPedido(
                     mesaId,
-                    user.id,
+                    activeStaff?.id || user.id,
                     empresa.id,
                     cart,
                     total

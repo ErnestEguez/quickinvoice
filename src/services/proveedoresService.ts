@@ -14,7 +14,7 @@ export interface Proveedor {
 }
 
 export const proveedoresService = {
-    async getProveedoresByEmpresa(empresaId: string): Promise<Proveedor[]> {
+    async getProveedoresByEmpresa(_empresaId: string): Promise<Proveedor[]> {
         const { data, error } = await supabase
             .from('proveedores')
             .select('*')

@@ -532,46 +532,6 @@ export function ConfigurationPage() {
                         ))}
                     </div>
                 </div>
-            ) : activeTab === 'mesas' ? (
-                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-                    <div className="flex items-center justify-between pb-4 border-b border-slate-200">
-                        <div>
-                            <h2 className="text-lg font-bold text-slate-900">Configuración de Mesas</h2>
-                            <p className="text-sm text-slate-500">Administra la distribución de tu restaurante</p>
-                        </div>
-                        <button
-                            onClick={() => {
-                                setEditingMesa({ capacidad: 4, estado: 'libre' })
-                                setIsMesaModalOpen(true)
-                            }}
-                            className="btn btn-primary py-2 px-4 text-sm flex items-center gap-2"
-                        >
-                            <Plus className="w-4 h-4" /> Nueva Mesa
-                        </button>
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
-                        {mesas.map(mesa => (
-                            <div key={mesa.id} className="card p-4 group relative hover:shadow-lg transition-all">
-                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => { setEditingMesa(mesa); setIsMesaModalOpen(true) }} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400">
-                                        <Edit2 className="w-3 h-3" />
-                                    </button>
-                                    <button onClick={() => handleDeleteMesa(mesa.id)} className="p-1.5 hover:bg-slate-100 rounded-lg text-red-400">
-                                        <Trash2 className="w-3 h-3" />
-                                    </button>
-                                </div>
-                                <div className="flex flex-col items-center justify-center py-4">
-                                    <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-400 mb-3">
-                                        <Utensils className="w-8 h-8" />
-                                    </div>
-                                    <h3 className="font-bold text-slate-900 text-lg">Mesa {mesa.numero}</h3>
-                                    <p className="text-xs text-slate-500 font-medium">{mesa.capacidad} Pers.</p>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
             ) : (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
                     <div className="flex items-center justify-between pb-4 border-b border-slate-200">

@@ -8,6 +8,8 @@ export interface Producto {
     categoria_id: string
     imagen_url: string | null
     iva_porcentaje: number
+    maneja_stock?: boolean
+    stock?: number
 }
 
 export interface Categoria {

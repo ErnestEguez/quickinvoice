@@ -19,8 +19,7 @@ import {
     Trash2,
     X,
     Save,
-    User,
-    Edit
+    User
 } from 'lucide-react'
 import { Link, useNavigate } from 'react-router-dom'
 
@@ -80,7 +79,9 @@ export function OrdersPage() {
                     data = data.filter((p: any) => p.created_at.startsWith(filterDate))
                 }
             }
-            setPedidos(data)
+            // Filtramos los pedidos que ya están facturados
+            const filtered = data.filter((o: any) => o.estado !== 'facturado')
+            setPedidos(filtered)
         } catch (err: any) {
             console.error('DETAILED ERROR LOADING PEDIDOS:', err)
             setError(err.message || 'Error desconocido al cargar pedidos')
@@ -102,9 +103,6 @@ export function OrdersPage() {
         }
     }
 
-    const handleEditPedido = (pedido: any) => {
-        navigate(`/take-order?mesaId=${pedido.mesa_id}&pedidoId=${pedido.id}`)
-    }
 
     const handleResetMesa = async (pedido: any) => {
         if (!confirm(`¿Estás seguro de cancelar el pedido de la Mesa ${pedido.mesas?.numero || '?'}? Esto liberará la mesa.`)) return

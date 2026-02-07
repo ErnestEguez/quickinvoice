@@ -20,8 +20,10 @@ interface AuthContextType {
     user: User | null
     profile: Profile | null
     empresa: Empresa | null
+    activeStaff: Profile | null
     loading: boolean
     signOut: () => Promise<void>
+    setActiveStaff: (staff: Profile | null) => void
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -30,7 +32,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [user, setUser] = useState<User | null>(null)
     const [profile, setProfile] = useState<Profile | null>(null)
     const [empresa, setEmpresa] = useState<Empresa | null>(null)
+    const [activeStaff, setActiveStaffState] = useState<Profile | null>(null)
     const [loading, setLoading] = useState(true)
+
+    // Load activeStaff from localStorage on mount
+    useEffect(() => {
+        const saved = localStorage.getItem('restoflow_active_staff')
+        if (saved) {
+            try {
+                setActiveStaffState(JSON.parse(saved))
+            } catch (e) {
+                console.error('Error parsing active staff', e)
+            }
+        }
+    }, [])
+
+    const setActiveStaff = (staff: Profile | null) => {
+        setActiveStaffState(staff)
+        if (staff) {
+            localStorage.setItem('restoflow_active_staff', JSON.stringify(staff))
+        } else {
+            localStorage.removeItem('restoflow_active_staff')
+        }
+    }
 
     useEffect(() => {
         // Check initial session
@@ -93,7 +117,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     return (
-        <AuthContext.Provider value={{ user, profile, empresa, loading, signOut }}>
+        <AuthContext.Provider value={{
+            user,
+            profile,
+            empresa,
+            activeStaff,
+            loading,
+            signOut,
+            setActiveStaff
+        }}>
             {children}
         </AuthContext.Provider>
     )

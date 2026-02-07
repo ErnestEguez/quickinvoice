@@ -1,8 +1,14 @@
 import { useState, useEffect } from 'react'
-import { useAuth } from '../contexts/AuthContext'
-import { inventarioService, type IngresoStock, type DetalleIngresoStock } from '../services/inventarioService'
+import { inventarioService } from '../services/inventarioService'
 import { proveedoresService, type Proveedor } from '../services/proveedoresService'
-import { Package, Plus, Trash2, Save, FileText } from 'lucide-react'
+import { useAuth } from '../contexts/AuthContext'
+import {
+    Plus,
+    FileText,
+    Package,
+    Trash2,
+    Save
+} from 'lucide-react'
 
 interface ProductoIngreso {
     producto_id: string
