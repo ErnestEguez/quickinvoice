@@ -6,18 +6,18 @@ import { LogIn, Loader2 } from 'lucide-react'
 
 export function LoginPage() {
     const navigate = useNavigate()
-    const { user } = useAuth()
+    // Redirect if already logged in AND has profile
+    const { user, profile, loading: authLoading, signOut } = useAuth()
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
-    // Redirect if already logged in
     useEffect(() => {
-        if (user) {
+        if (user && profile && !authLoading) {
             navigate('/', { replace: true })
         }
-    }, [user, navigate])
+    }, [user, profile, authLoading, navigate])
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -90,6 +90,21 @@ export function LoginPage() {
                             {error}
                         </div>
                     )}
+
+                    {user && !profile && (
+                        <div className="p-4 bg-amber-50 rounded-xl border border-amber-200 space-y-3">
+                            <p className="text-xs text-amber-700 font-bold leading-tight">
+                                Tienes una sesión activa pero no pudimos cargar tu perfil. Es posible que el registro esté dañado.
+                            </p>
+                            <button
+                                onClick={() => signOut()}
+                                className="w-full py-2 bg-white border border-amber-300 text-amber-700 text-xs font-black rounded-lg hover:bg-amber-100"
+                            >
+                                CERRAR SESIÓN Y REINTENTAR
+                            </button>
+                        </div>
+                    )}
+
 
                     <button
                         type="submit"

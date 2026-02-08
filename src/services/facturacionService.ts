@@ -111,9 +111,9 @@ export const facturacionService = {
         return `${establecimiento.padStart(3, '0')}-${puntoEmision.padStart(3, '0')}-${numStr}`
     },
 
-    async generarFacturaDesdePedido(pedido: any, data: { clienteId: string, pagos: { metodo: string, valor: number, referencia?: string }[] }) {
+    async generarFacturaDesdePedido(pedido: any, data: { clienteId: string, pagos: { metodo: string, valor: number, referencia?: string }[], sri_utilizacion_sistema_financiero?: boolean }) {
         try {
-            const { clienteId, pagos } = data
+            const { clienteId, pagos, sri_utilizacion_sistema_financiero = false } = data
             // 1. Obtener configuración SRI de la empresa
             const config = await this.getSriConfig(pedido.empresa_id)
             const est = config.establecimiento || '001'
@@ -148,7 +148,8 @@ export const facturacionService = {
                     ambiente: config.ambiente || 'PRUEBAS',
                     total: pedido.total,
                     estado_sri: 'AUTORIZADO',
-                    fecha_autorizacion: new Date().toISOString()
+                    fecha_autorizacion: new Date().toISOString(),
+                    sri_utilizacion_sistema_financiero
                 })
                 .select()
                 .single()
@@ -234,7 +235,8 @@ export const facturacionService = {
                         productos (*)
                     )
                 ),
-                empresas (*)
+                empresas (*),
+                comprobante_pagos (*)
             `)
             .eq('id', id)
             .single()

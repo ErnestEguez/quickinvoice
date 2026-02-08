@@ -171,17 +171,45 @@ export function InvoicePrint() {
 
                 {/* Totals Section */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-8 border-t-2 border-slate-100">
-                    <div className="bg-slate-50 rounded-2xl p-6 h-fit">
-                        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Información Adicional</h3>
-                        <div className="space-y-2 text-sm">
-                            <div className="flex justify-between">
-                                <span className="text-slate-500">Dirección:</span>
-                                <span className="text-slate-900 font-medium">{factura.clientes?.direccion || '-'}</span>
+                    <div className="space-y-6">
+                        <div className="bg-slate-50 rounded-2xl p-6 h-fit border border-slate-100">
+                            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Información Adicional</h3>
+                            <div className="space-y-3 text-sm">
+                                <div className="flex justify-between">
+                                    <span className="text-slate-500 font-medium">Dirección:</span>
+                                    <span className="text-slate-900 font-bold">{factura.clientes?.direccion || '-'}</span>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <span className="text-slate-500 font-medium block">Formas de Pago:</span>
+                                    {factura.comprobante_pagos?.map((p: any, idx: number) => (
+                                        <div key={idx} className="flex justify-between pl-4 text-xs">
+                                            <span className="text-slate-600 uppercase italic">{p.metodo_pago.replace('_', ' ')}:</span>
+                                            <span className="text-slate-900 font-black">{formatCurrency(p.valor)}</span>
+                                        </div>
+                                    ))}
+                                    {(!factura.comprobante_pagos || factura.comprobante_pagos.length === 0) && (
+                                        <span className="text-slate-900 font-bold pl-4">OTRAS CON UTILIZACION DEL SISTEMA FINANCIERO</span>
+                                    )}
+                                </div>
+                                <div className="pt-2 border-t border-slate-200">
+                                    <span className="text-slate-400 text-[10px] font-black uppercase">Requerimiento SRI:</span>
+                                    <p className="text-slate-900 font-black text-xs mt-1">
+                                        {factura.sri_utilizacion_sistema_financiero
+                                            ? "CON UTILIZACION DEL SISTEMA FINANCIERO"
+                                            : "SIN UTILIZACION DEL SISTEMA FINANCIERO"}
+                                    </p>
+                                </div>
                             </div>
-                            <div className="flex justify-between">
-                                <span className="text-slate-500">Forma de Pago:</span>
-                                <span className="text-slate-900 font-medium">SIN UTILIZACION DEL SISTEMA FINANCIERO</span>
-                            </div>
+                        </div>
+
+                        {/* QR Code */}
+                        <div className="flex flex-col items-center justify-center p-6 bg-white border border-slate-100 rounded-2xl space-y-3">
+                            <img
+                                src={`https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${factura.clave_acceso}`}
+                                alt="QR SRI"
+                                className="w-32 h-32"
+                            />
+                            <p className="text-[8px] font-mono text-slate-400 uppercase tracking-tighter">Escanee para consultar en SRI</p>
                         </div>
                     </div>
 

@@ -29,10 +29,11 @@ export const sriService = {
             .order('created_at', { ascending: false })
 
         if (fecha) {
-            const startOfDay = new Date(fecha)
-            startOfDay.setHours(0, 0, 0, 0)
-            const endOfDay = new Date(fecha)
-            endOfDay.setHours(23, 59, 59, 999)
+            // fecha comes as YYYY-MM-DD from the input[type=date]
+            const [year, month, day] = fecha.split('-').map(Number)
+            // Create dates in local time
+            const startOfDay = new Date(year, month - 1, day, 0, 0, 0, 0)
+            const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999)
 
             query = query
                 .gte('created_at', startOfDay.toISOString())

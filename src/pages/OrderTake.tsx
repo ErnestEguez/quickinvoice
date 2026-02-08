@@ -35,7 +35,7 @@ export function OrderTake() {
     const [loading, setLoading] = useState(true)
     const [submitting, setSubmitting] = useState(false)
     const [existingPedido, setExistingPedido] = useState<any>(null)
-    const { user, empresa, activeStaff } = useAuth()
+    const { user, empresa, profile } = useAuth()
 
     useEffect(() => {
         if (mesaId) {
@@ -111,7 +111,7 @@ export function OrderTake() {
                 // Crear nuevo pedido
                 const pedido = await pedidoService.crearPedido(
                     mesaId,
-                    activeStaff?.id || user.id,
+                    user.id,
                     empresa.id,
                     cart,
                     total
@@ -299,6 +299,14 @@ export function OrderTake() {
                             </div>
                         </div>
 
+                        {profile?.rol === 'oficina' && (
+                            <button
+                                onClick={() => alert('Para facturar vaya a la pantalla de Pedidos y seleccione Facturar')}
+                                className="btn bg-amber-600 text-white w-full py-3 rounded-xl font-bold mb-4 flex items-center justify-center gap-2"
+                            >
+                                Ir a Facturar
+                            </button>
+                        )}
                         <button
                             disabled={cart.length === 0 || submitting}
                             onClick={handleConfirmarPedido}

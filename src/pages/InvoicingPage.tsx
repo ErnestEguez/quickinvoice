@@ -34,7 +34,7 @@ export function InvoicingPage() {
     const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
     const [sriConfig, setSriConfig] = useState<Partial<SriConfig>>({})
     const [selectedFile, setSelectedFile] = useState<File | null>(null)
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0])
+    const [selectedDate, setSelectedDate] = useState(new Date().toLocaleDateString('en-CA')) // YYYY-MM-DD
 
     useEffect(() => {
         if (empresa?.id) {

@@ -46,6 +46,7 @@ export function OrdersPage() {
         telefono: ''
     })
     const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0])
+    const [sriSystemFinanciero, setSriSystemFinanciero] = useState(false)
 
     useEffect(() => {
         console.log('OrdersPage - Current Empresa:', empresa)
@@ -172,7 +173,8 @@ export function OrdersPage() {
             setIsSavingInvoice(true)
             await facturacionService.generarFacturaDesdePedido(selectedPedido, {
                 clienteId: selectedClient.id,
-                pagos: invoicePayments.map(p => ({ ...p, valor: Number(p.valor) }))
+                pagos: invoicePayments.map(p => ({ ...p, valor: Number(p.valor) })),
+                sri_utilizacion_sistema_financiero: sriSystemFinanciero
             })
             alert('¡Factura generada exitosamente!')
             setIsInvoiceModalOpen(false)
@@ -329,7 +331,7 @@ export function OrdersPage() {
                                             Ver Factura
                                         </Link>
                                     )}
-                                    {pedido.estado === 'atendido' && (
+                                    {pedido.estado === 'atendido' && profile?.rol === 'oficina' && (
                                         <button
                                             onClick={() => handleOpenInvoiceModal(pedido)}
                                             className="btn bg-amber-600 hover:bg-amber-700 text-white text-sm py-2 px-4 flex items-center gap-2"
@@ -354,15 +356,17 @@ export function OrdersPage() {
                                 </div>
                             </div>
 
-                            {/* Actions Footer for Cancel */}
-                            <div className="px-6 pb-2">
-                                <button
-                                    onClick={() => handleResetMesa(pedido)}
-                                    className="text-xs text-red-400 hover:text-red-600 underline flex items-center gap-1"
-                                >
-                                    <Trash2 className="w-3 h-3" /> Resetear Mesa / Cancelar Pedido
-                                </button>
-                            </div>
+                            {/* Actions Footer for Cancel - Only for Oficina/Admin */}
+                            {profile?.rol !== 'mesero' && (
+                                <div className="px-6 pb-2">
+                                    <button
+                                        onClick={() => handleResetMesa(pedido)}
+                                        className="text-xs text-red-400 hover:text-red-600 underline flex items-center gap-1"
+                                    >
+                                        <Trash2 className="w-3 h-3" /> Resetear Mesa / Cancelar Pedido
+                                    </button>
+                                </div>
+                            )}
 
                             {expandedPedido === pedido.id && (
                                 <div className="bg-slate-50 border-t border-slate-100 p-4 sm:p-6">
@@ -535,13 +539,10 @@ export function OrdersPage() {
                                                     onChange={(e) => handlePaymentChange(idx, 'metodo', e.target.value)}
                                                     className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500"
                                                 >
-                                                    <option value="efectivo">SIN UTILIZACION DEL SISTEMA FINANCIERO (Efectivo)</option>
-                                                    <option value="tarjeta">TARJETA DE CREDITO</option>
-                                                    <option value="tarjeta_debito">TARJETA DE DEBITO</option>
-                                                    <option value="transferencia">TRANSFERENCIA PROPIO BANCO</option>
-                                                    <option value="transferencia_otro">TRANSFERENCIA OTRO BANCO</option>
-                                                    <option value="cheque">CHEQUE</option>
-                                                    <option value="otros">OTROS CON UTILIZACION DEL SISTEMA FINANCIERO</option>
+                                                    <option value="efectivo">EFECTIVO</option>
+                                                    <option value="tarjeta">TARJETA CREDITO/DEBITO</option>
+                                                    <option value="transferencia">TRANSFERENCIA</option>
+                                                    <option value="otros">OTROS</option>
                                                 </select>
                                             </div>
                                             <div className="w-24 sm:w-32">
@@ -574,6 +575,33 @@ export function OrdersPage() {
                                             )}
                                         </div>
                                     ))}
+                                </div>
+
+                                {/* Requerimiento SRI */}
+                                <div className="pt-4 border-t border-slate-100">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-3">Requerimiento SRI</label>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <button
+                                            onClick={() => setSriSystemFinanciero(false)}
+                                            className={cn(
+                                                "px-3 py-2 rounded-xl border text-xs font-bold transition-all flex items-center justify-between",
+                                                !sriSystemFinanciero ? "border-primary-600 bg-primary-50 text-primary-700 shadow-sm" : "border-slate-200 text-slate-500 hover:border-slate-300"
+                                            )}
+                                        >
+                                            Sin Utilización Sist. Financiero
+                                            {!sriSystemFinanciero && <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />}
+                                        </button>
+                                        <button
+                                            onClick={() => setSriSystemFinanciero(true)}
+                                            className={cn(
+                                                "px-3 py-2 rounded-xl border text-xs font-bold transition-all flex items-center justify-between",
+                                                sriSystemFinanciero ? "border-primary-600 bg-primary-50 text-primary-700 shadow-sm" : "border-slate-200 text-slate-500 hover:border-slate-300"
+                                            )}
+                                        >
+                                            Con Utilización Sist. Financiero
+                                            {sriSystemFinanciero && <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>

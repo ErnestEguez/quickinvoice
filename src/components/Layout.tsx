@@ -16,7 +16,6 @@ import {
     BarChart3
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { StaffOverlay } from './StaffOverlay'
 import { cn } from '../lib/utils'
 
 interface SidebarItemProps {
@@ -43,7 +42,7 @@ const SidebarItem = ({ to, icon: Icon, label, active }: SidebarItemProps) => (
 )
 
 export function Layout({ children }: { children: React.ReactNode }) {
-    const { profile, empresa, signOut, activeStaff, setActiveStaff } = useAuth()
+    const { profile, empresa, signOut } = useAuth()
     const location = useLocation()
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(true)
 
@@ -67,11 +66,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
     return (
         <div className="min-h-screen bg-slate-50 flex">
-            {/* Staff Overlay for Waiters/Switching */}
-            {!activeStaff && (profile?.rol === 'oficina' || profile?.rol === 'mesero') && (
-                <StaffOverlay />
-            )}
-
             {/* Sidebar */}
             <aside className={cn(
                 "bg-white border-r border-slate-200 transition-all duration-300 z-30 fixed inset-y-0 left-0",
@@ -152,19 +146,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
                         <div className="flex items-center gap-4 text-right">
                             <div className="flex flex-col">
-                                <p className="text-sm font-bold text-slate-900">{activeStaff?.nombre || profile?.nombre || 'Usuario'}</p>
-                                <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest">{activeStaff?.rol || profile?.rol?.replace('_', ' ')}</p>
+                                <p className="text-sm font-bold text-slate-900">{profile?.nombre || 'Usuario'}</p>
+                                <p className="text-[10px] text-slate-500 uppercase font-black tracking-widest">{profile?.rol?.replace('_', ' ')}</p>
                             </div>
-                            <button
-                                onClick={() => setActiveStaff(null)}
-                                className="p-2 hover:bg-slate-100 rounded-xl text-primary-600 font-bold text-xs"
-                                title="Cambiar de mesero"
-                            >
-                                <Users className="w-4 h-4" />
-                            </button>
                         </div>
                         <div className="w-10 h-10 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center font-bold">
-                            {(activeStaff?.nombre || profile?.nombre)?.[0] || 'U'}
+                            {profile?.nombre?.[0] || 'U'}
                         </div>
                     </div>
                 </header>

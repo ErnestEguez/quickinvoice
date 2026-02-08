@@ -1,18 +1,19 @@
 import { useEffect, useState } from 'react'
 import { mesaService, type Mesa } from '../services/mesaService'
 import { reservaService, type Reserva } from '../services/reservaService'
-import { useAuth } from '../contexts/AuthContext'
+import { useAuth, type Profile } from '../contexts/AuthContext'
 import { cn } from '../lib/utils'
-import { Users, Clock, RefreshCcw } from 'lucide-react'
+import { Users, Clock, RefreshCw, Plus } from 'lucide-react'
 
 interface MesaCardProps {
     mesa: Mesa
     proximaReserva?: Reserva
     onClick: (mesa: Mesa) => void
     onReset: (mesa: Mesa) => void
+    profile: Profile | null
 }
 
-function MesaCard({ mesa, proximaReserva, onClick, onReset }: MesaCardProps) {
+function MesaCard({ mesa, proximaReserva, onClick, onReset, profile }: MesaCardProps) {
     // If it's free but has a reservation soon, we treat it as reserved
     const ambientEstado = (mesa.estado === 'libre' && proximaReserva) ? 'reservada' : mesa.estado
 
@@ -54,10 +55,15 @@ function MesaCard({ mesa, proximaReserva, onClick, onReset }: MesaCardProps) {
                             <Users className="w-3 h-3" />
                             {mesa.capacidad}
                         </div>
-                        {proximaReserva && (
-                            <div className="flex items-center gap-1 text-[10px] font-black bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full">
-                                <Clock className="w-2.5 h-2.5" />
-                                {new Date(proximaReserva.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {(proximaReserva && profile?.rol !== 'mesero') && (
+                            <div className="flex flex-col items-end gap-1">
+                                <div className="flex items-center gap-1 text-[10px] font-black bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full">
+                                    <Clock className="w-2.5 h-2.5" />
+                                    {new Date(proximaReserva.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                                <div className="text-[10px] font-bold text-primary-600 truncate max-w-[100px]">
+                                    {proximaReserva.cliente_nombre} ({proximaReserva.personas})
+                                </div>
                             </div>
                         )}
                     </div>
@@ -67,13 +73,13 @@ function MesaCard({ mesa, proximaReserva, onClick, onReset }: MesaCardProps) {
                     {ambientEstado === 'libre' ? 'Disponible' : ambientEstado}
                 </div>
             </button>
-            {mesa.estado !== 'libre' && (
+            {(mesa.estado !== 'libre' && profile?.rol !== 'mesero') && (
                 <button
                     onClick={(e) => { e.stopPropagation(); onReset(mesa); }}
                     title="Resetear mesa / Liberar"
                     className="absolute -top-2 -right-2 p-2 bg-white rounded-full shadow-lg border border-slate-200 text-slate-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity z-10"
                 >
-                    <RefreshCcw className="w-4 h-4" />
+                    <RefreshCw className="w-4 h-4" />
                 </button>
             )}
         </div>
@@ -88,7 +94,14 @@ export function MesaGrid() {
     const [reservas, setReservas] = useState<Reserva[]>([])
     const [loading, setLoading] = useState(true)
     const [filter, setFilter] = useState<'Todas' | 'Libres' | 'Ocupadas' | 'Reservadas'>('Todas')
-    const { empresa } = useAuth()
+    const [isReservaModalOpen, setIsReservaModalOpen] = useState(false)
+    const [newReserva, setNewReserva] = useState<Partial<Reserva>>({
+        cliente_nombre: '',
+        personas: 2,
+        fecha_hora: new Date(new Date().getTime() + 60 * 60000).toISOString().slice(0, 16), // 1 hora después por defecto
+        estado: 'pendiente'
+    })
+    const { empresa, profile } = useAuth()
 
     useEffect(() => {
         loadMesas()
@@ -108,11 +121,39 @@ export function MesaGrid() {
             setMesas(data)
 
             if (empresa?.id) {
-                const resData = await reservaService.getReservasProximas(empresa.id)
-                setReservas(resData)
+                // Obtenemos todas las pendientes para hoy/futuro
+                const resData = await reservaService.getReservas(empresa.id)
+                setReservas(resData.filter(r => r.estado === 'pendiente'))
             }
         } catch (error) {
             console.error('Error loading mesas:', error)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    async function handleSaveReserva() {
+        if (!newReserva.cliente_nombre || !newReserva.mesa_id || !newReserva.fecha_hora) {
+            alert('Por favor complete nombre, mesa y fecha/hora')
+            return
+        }
+        try {
+            setLoading(true)
+            await reservaService.crearReserva({
+                ...newReserva,
+                empresa_id: empresa!.id
+            })
+            setIsReservaModalOpen(false)
+            setNewReserva({
+                cliente_nombre: '',
+                personas: 2,
+                fecha_hora: new Date(new Date().getTime() + 60 * 60000).toISOString().slice(0, 16),
+                estado: 'pendiente'
+            })
+            loadMesas()
+        } catch (error: any) {
+            console.error('Error creating reserva:', error)
+            alert(`Error al crear reserva: ${error.message || 'Error desconocido'}`)
         } finally {
             setLoading(false)
         }
@@ -183,6 +224,14 @@ export function MesaGrid() {
                     <h1 className="text-2xl font-bold text-slate-900">Gestión de Mesas</h1>
                     <p className="text-slate-500">Vista en tiempo real del salón</p>
                 </div>
+                {profile?.rol !== 'mesero' && (
+                    <button
+                        onClick={() => setIsReservaModalOpen(true)}
+                        className="btn btn-primary flex items-center gap-2"
+                    >
+                        <Plus className="w-4 h-4" /> Nueva Reserva
+                    </button>
+                )}
             </div>
 
             <div className="flex gap-4 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-hide">
@@ -210,6 +259,7 @@ export function MesaGrid() {
                         proximaReserva={getMesaReserva(mesa.id)}
                         onClick={handleMesaClick}
                         onReset={handleResetMesa}
+                        profile={profile}
                     />
                 ))}
                 {mesas.length === 0 && !loading && (
@@ -220,6 +270,74 @@ export function MesaGrid() {
                     </div>
                 )}
             </div>
+
+            {/* Modal Nueva Reserva */}
+            {isReservaModalOpen && (
+                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 space-y-6">
+                        <h2 className="text-xl font-bold text-slate-900">Nueva Reserva</h2>
+                        <div className="space-y-4">
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Nombre del Cliente</label>
+                                <input
+                                    type="text"
+                                    className="w-full px-4 py-3 rounded-xl border border-slate-200"
+                                    placeholder="Nombre completo..."
+                                    value={newReserva.cliente_nombre}
+                                    onChange={e => setNewReserva({ ...newReserva, cliente_nombre: e.target.value })}
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Personas</label>
+                                    <input
+                                        type="number"
+                                        className="w-full px-4 py-3 rounded-xl border border-slate-200"
+                                        value={newReserva.personas}
+                                        onChange={e => setNewReserva({ ...newReserva, personas: parseInt(e.target.value) })}
+                                    />
+                                </div>
+                                <div className="space-y-1">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Mesa</label>
+                                    <select
+                                        className="w-full px-4 py-3 rounded-xl border border-slate-200 bg-white"
+                                        value={newReserva.mesa_id || ''}
+                                        onChange={e => setNewReserva({ ...newReserva, mesa_id: e.target.value })}
+                                    >
+                                        <option value="">Seleccione mesa...</option>
+                                        {mesas.map(m => (
+                                            <option key={m.id} value={m.id}>Mesa {m.numero}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="space-y-1">
+                                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Fecha y Hora</label>
+                                <input
+                                    type="datetime-local"
+                                    className="w-full px-4 py-3 rounded-xl border border-slate-200"
+                                    value={newReserva.fecha_hora}
+                                    onChange={e => setNewReserva({ ...newReserva, fecha_hora: e.target.value })}
+                                />
+                            </div>
+                        </div>
+                        <div className="flex gap-4 pt-4">
+                            <button
+                                onClick={() => setIsReservaModalOpen(false)}
+                                className="flex-1 py-3 font-bold border rounded-xl hover:bg-slate-50 transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={handleSaveReserva}
+                                className="flex-1 py-3 font-bold bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors"
+                            >
+                                Crear Reserva
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

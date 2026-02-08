@@ -19,7 +19,7 @@ import { InventarioPage } from './pages/InventarioPage'
 import { KardexPage } from './pages/KardexPage'
 import { ProtectedRoute as RoleProtectedRoute } from './components/ProtectedRoute'
 
-// Protected Route Component
+// Componente para proteger rutas (Auth simple)
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
 
@@ -38,6 +38,22 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+// Componente para manejar la redirección del Dashboard inicial según rol
+function HomeRedirect() {
+  const { profile, loading } = useAuth()
+
+  if (loading) return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+    </div>
+  )
+
+  if (profile?.rol === 'admin_plataforma') {
+    return <Navigate to="/configuracion" replace />
+  }
+
+  return <Dashboard />
+}
 
 function App() {
   return (
@@ -48,9 +64,11 @@ function App() {
 
           <Route path="/" element={
             <ProtectedRoute>
-              <Layout>
-                <Dashboard />
-              </Layout>
+              <RoleProtectedRoute allowedRoles={['oficina', 'admin_plataforma']}>
+                <Layout>
+                  <HomeRedirect />
+                </Layout>
+              </RoleProtectedRoute>
             </ProtectedRoute>
           } />
 
@@ -80,33 +98,41 @@ function App() {
 
           <Route path="/productos" element={
             <ProtectedRoute>
-              <Layout>
-                <ProductsPage />
-              </Layout>
+              <RoleProtectedRoute allowedRoles={['oficina']}>
+                <Layout>
+                  <ProductsPage />
+                </Layout>
+              </RoleProtectedRoute>
             </ProtectedRoute>
           } />
 
           <Route path="/clientes" element={
             <ProtectedRoute>
-              <Layout>
-                <ClientsPage />
-              </Layout>
+              <RoleProtectedRoute allowedRoles={['oficina']}>
+                <Layout>
+                  <ClientsPage />
+                </Layout>
+              </RoleProtectedRoute>
             </ProtectedRoute>
           } />
 
           <Route path="/facturacion" element={
             <ProtectedRoute>
-              <Layout>
-                <InvoicingPage />
-              </Layout>
+              <RoleProtectedRoute allowedRoles={['oficina']}>
+                <Layout>
+                  <InvoicingPage />
+                </Layout>
+              </RoleProtectedRoute>
             </ProtectedRoute>
           } />
 
           <Route path="/configuracion" element={
             <ProtectedRoute>
-              <Layout>
-                <ConfigurationPage />
-              </Layout>
+              <RoleProtectedRoute allowedRoles={['oficina', 'admin_plataforma']}>
+                <Layout>
+                  <ConfigurationPage />
+                </Layout>
+              </RoleProtectedRoute>
             </ProtectedRoute>
           } />
 

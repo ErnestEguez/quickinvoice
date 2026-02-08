@@ -17,13 +17,17 @@ import {
     Image as ImageIcon,
     Loader2,
     Grid,
-    Utensils
+    Utensils,
+    RefreshCcw,
+    X,
+    ArrowLeft
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 
 export function ConfigurationPage() {
     const { empresa, profile } = useAuth()
     const [activeTab, setActiveTab] = useState<'empresa' | 'staff' | 'mesas' | 'plataforma'>('empresa')
+    const [platformSubTab, setPlatformSubTab] = useState<'empresas' | 'personal'>('empresas')
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
 
@@ -51,6 +55,7 @@ export function ConfigurationPage() {
     const [allEmpresas, setAllEmpresas] = useState<any[]>([])
     const [isEmpresaModalOpen, setIsEmpresaModalOpen] = useState(false)
     const [editingEmpresa, setEditingEmpresa] = useState<any>(null)
+    const [oficinaUsers, setOficinaUsers] = useState<StaffMember[]>([])
 
     useEffect(() => {
         if (profile?.rol === 'admin_plataforma') {
@@ -59,10 +64,10 @@ export function ConfigurationPage() {
     }, [profile?.rol])
 
     useEffect(() => {
-        if (empresa?.id) {
+        if (profile) {
             loadData()
         }
-    }, [empresa?.id])
+    }, [profile?.id, empresa?.id])
 
     async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
         const file = e.target.files?.[0]
@@ -92,28 +97,64 @@ export function ConfigurationPage() {
     }
 
     async function loadData() {
+        // Safety timeout for data loading
+        const timeout = setTimeout(() => {
+            if (loading) {
+                console.warn('Configuration data load timed out');
+                setLoading(false);
+            }
+        }, 10000);
+
         try {
             setLoading(true)
 
             // Si es plataforma admin, podemos ver todo
             if (profile?.rol === 'admin_plataforma') {
-                const { data: emps } = await supabase.from('empresas').select('*').order('nombre')
+                console.log('Plataforma Mode: Fetching all empresas');
+                const { data: emps, error } = await supabase.from('empresas').select('*').order('nombre')
+                if (error) throw error;
                 setAllEmpresas(emps || [])
+
+                // Load all oficina users - Simplified select to avoid schema cache join issues
+                const { data: oficinaData, error: oficinaError } = await supabase
+                    .from('profiles')
+                    .select('*')
+                    .eq('rol', 'oficina')
+                    .order('nombre')
+
+                if (!oficinaError && oficinaData) {
+                    // Enrich with empresa names manually to avoid join issues
+                    const enrichedUsers = oficinaData.map(user => ({
+                        ...user,
+                        empresa: allEmpresas.find(e => e.id === user.empresa_id)
+                    }))
+                    setOficinaUsers(enrichedUsers)
+                } else if (oficinaError) {
+                    console.error('Error fetching oficina users:', oficinaError)
+                }
             }
 
             if (empresa?.id) {
+                console.log('Company Mode: Fetching data for', empresa.id);
                 const [empData, staffData, mesasData] = await Promise.all([
                     supabase.from('empresas').select('*').eq('id', empresa!.id).single(),
                     staffService.getStaffByEmpresa(empresa!.id),
                     mesaService.getMesas()
                 ])
                 if (empData.data) setCompanyData(empData.data)
-                setStaff(staffData.filter(s => s.rol !== 'admin_plataforma'))
+                // Filter: No mostrar al propio usuario logueado en la lista de personal de servicio 
+                // si es rol oficina, para evitar confusiones.
+                const filteredStaff = staffData.filter(s =>
+                    s.rol !== 'admin_plataforma' &&
+                    s.id !== profile?.id
+                )
+                setStaff(filteredStaff)
                 setMesas(mesasData)
             }
         } catch (error) {
             console.error('Error loading config:', error)
         } finally {
+            clearTimeout(timeout);
             setLoading(false)
         }
     }
@@ -170,12 +211,35 @@ export function ConfigurationPage() {
                 return
             }
 
+            // Sanitización EXTREMA: Solo dejar los campos que realmente existen en la tabla 'profiles'
+            // Esto evita el error "Could not find column ... in schema cache"
+            const dataToSave = {
+                nombre: editingStaff.nombre,
+                rol: profile?.rol === 'admin_plataforma' ? 'oficina' : editingStaff.rol,
+                empresa_id: profile?.rol === 'admin_plataforma' ? editingStaff.empresa_id : empresa?.id,
+                email: editingStaff.email,
+                pin: editingStaff.pin,
+                estado: editingStaff.estado,
+                fecha_baja: editingStaff.fecha_baja,
+                motivo_baja: editingStaff.motivo_baja
+            }
+
+            if (!dataToSave.empresa_id) {
+                alert('Debe seleccionar una empresa destino')
+                return
+            }
+
             if (editingStaff.id) {
-                await staffService.updateStaffMember(editingStaff.id, editingStaff)
+                const { error } = await supabase
+                    .from('profiles')
+                    .update(dataToSave)
+                    .eq('id', editingStaff.id)
+
+                if (error) throw error
             } else {
                 await staffService.createStaffMember({
-                    ...editingStaff,
-                    empresa_id: empresa!.id
+                    ...dataToSave,
+                    password: (editingStaff as any).password // Pass password for Auth creation
                 })
             }
 
@@ -183,6 +247,7 @@ export function ConfigurationPage() {
             setEditingStaff(null)
             loadData()
         } catch (error: any) {
+            console.error('Save staff error:', error)
             alert(`Error al guardar staff: ${error.message}`)
         } finally {
             setSaving(false)
@@ -196,6 +261,16 @@ export function ConfigurationPage() {
             loadData()
         } catch (error: any) {
             alert(`Error al eliminar: ${error.message}`)
+        }
+    }
+
+    async function handleResetMesa(mesa: Mesa) {
+        if (!confirm(`¿Estás seguro de resetear la Mesa ${mesa.numero}? Se cancelarán pedidos pendientes no facturados.`)) return
+        try {
+            await mesaService.resetMesa(mesa.id)
+            loadData()
+        } catch (error: any) {
+            alert(`Error al resetear: ${error.message}`)
         }
     }
 
@@ -237,6 +312,24 @@ export function ConfigurationPage() {
         }
     }
 
+    async function handleDeleteEmpresa(id: string) {
+        if (!confirm('¿Estás seguro de desactivar esta empresa? Los usuarios asociados no podrán acceder.')) return
+        try {
+            setSaving(true)
+            // Soft delete - set activo to false
+            await supabase
+                .from('empresas')
+                .update({ activo: false })
+                .eq('id', id)
+            loadData()
+            alert('Empresa desactivada correctamente')
+        } catch (error: any) {
+            alert(`Error al desactivar empresa: ${error.message}`)
+        } finally {
+            setSaving(false)
+        }
+    }
+
     if (loading) return <div className="p-12 text-center">Cargando configuración...</div>
 
     return (
@@ -244,54 +337,55 @@ export function ConfigurationPage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">Configuración</h1>
-                    <p className="text-slate-500">Gestiona tu empresa y personal</p>
+                    <p className="text-slate-500">{profile?.rol === 'admin_plataforma' ? 'Administración de Plataforma' : 'Gestiona tu empresa y personal'}</p>
                 </div>
-            </div>
-
-            <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit">
-                <button
-                    onClick={() => setActiveTab('empresa')}
-                    className={cn(
-                        "flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all",
-                        activeTab === 'empresa' ? "bg-white text-primary-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                    )}
-                >
-                    <Building2 className="w-4 h-4" />
-                    Empresa
-                </button>
-                <button
-                    onClick={() => setActiveTab('staff')}
-                    className={cn(
-                        "flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all",
-                        activeTab === 'staff' ? "bg-white text-primary-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                    )}
-                >
-                    <Users className="w-4 h-4" />
-                    Personal
-                </button>
-                <button
-                    onClick={() => setActiveTab('mesas')}
-                    className={cn(
-                        "flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all",
-                        activeTab === 'mesas' ? "bg-white text-primary-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                    )}
-                >
-                    <Grid className="w-4 h-4" />
-                    Mesas
-                </button>
                 {profile?.rol === 'admin_plataforma' && (
-                    <button
-                        onClick={() => setActiveTab('plataforma')}
-                        className={cn(
-                            "flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all",
-                            activeTab === 'plataforma' ? "bg-white text-primary-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                        )}
+                    <a
+                        href="/"
+                        className="btn btn-secondary py-2 px-4 text-sm flex items-center gap-2"
                     >
-                        <Shield className="w-4 h-4" />
-                        Plataforma
-                    </button>
+                        <ArrowLeft className="w-4 h-4" /> Volver al Dashboard
+                    </a>
                 )}
             </div>
+
+            {/* Tabs - Only show for non-platform admins */}
+            {profile?.rol !== 'admin_plataforma' && (
+                <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit">
+                    <button
+                        onClick={() => setActiveTab('empresa')}
+                        className={cn(
+                            "flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all",
+                            activeTab === 'empresa' ? "bg-white text-primary-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                        )}
+                    >
+                        <Building2 className="w-4 h-4" />
+                        Empresa
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('staff')}
+                        className={cn(
+                            "flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all",
+                            activeTab === 'staff' ? "bg-white text-primary-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                        )}
+                    >
+                        <Users className="w-4 h-4" />
+                        Personal
+                    </button>
+                    {profile?.rol === 'oficina' && (
+                        <button
+                            onClick={() => setActiveTab('mesas')}
+                            className={cn(
+                                "flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all",
+                                activeTab === 'mesas' ? "bg-white text-primary-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                            )}
+                        >
+                            <Grid className="w-4 h-4" />
+                            Mesas
+                        </button>
+                    )}
+                </div>
+            )}
 
             {activeTab === 'empresa' ? (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in slide-in-from-bottom-4">
@@ -514,6 +608,13 @@ export function ConfigurationPage() {
                         {mesas.map(mesa => (
                             <div key={mesa.id} className="card p-4 group relative hover:shadow-lg transition-all">
                                 <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button
+                                        onClick={() => handleResetMesa(mesa)}
+                                        title="Resetear mesa / Liberar"
+                                        className="p-1.5 hover:bg-slate-100 rounded-lg text-amber-500"
+                                    >
+                                        <RefreshCcw className="w-3 h-3" />
+                                    </button>
                                     <button onClick={() => { setEditingMesa(mesa); setIsMesaModalOpen(true) }} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400">
                                         <Edit2 className="w-3 h-3" />
                                     </button>
@@ -534,144 +635,498 @@ export function ConfigurationPage() {
                 </div>
             ) : (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
-                    <div className="flex items-center justify-between pb-4 border-b border-slate-200">
-                        <div>
-                            <h2 className="text-lg font-bold text-slate-900">Gestión de Empresas (SaaS)</h2>
-                            <p className="text-sm text-slate-500">Administra todos los negocios registrados en la plataforma</p>
-                        </div>
+                    {/* Sub-tabs for Platform Admin */}
+                    <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit">
                         <button
-                            onClick={() => {
-                                setEditingEmpresa({ nombre: '', ruc: '' })
-                                setIsEmpresaModalOpen(true)
-                            }}
-                            className="btn btn-primary py-2 px-4 text-sm flex items-center gap-2"
+                            onClick={() => setPlatformSubTab('empresas')}
+                            className={cn(
+                                "flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all",
+                                platformSubTab === 'empresas' ? "bg-white text-primary-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                            )}
                         >
-                            <Plus className="w-4 h-4" /> Nueva Empresa
+                            <Building2 className="w-4 h-4" />
+                            Empresas
+                        </button>
+                        <button
+                            onClick={() => setPlatformSubTab('personal')}
+                            className={cn(
+                                "flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all",
+                                platformSubTab === 'personal' ? "bg-white text-primary-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                            )}
+                        >
+                            <Users className="w-4 h-4" />
+                            Personal
                         </button>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {allEmpresas.map(emp => (
-                            <div key={emp.id} className="card p-6 group">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <h3 className="font-bold text-slate-900">{emp.nombre}</h3>
-                                        <p className="text-xs text-slate-500">RUC: {emp.ruc}</p>
-                                    </div>
-                                    <button
-                                        onClick={() => {
-                                            setEditingEmpresa(emp)
-                                            setIsEmpresaModalOpen(true)
-                                        }}
-                                        className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 group-hover:text-primary-600"
-                                    >
-                                        <Edit2 className="w-4 h-4" />
-                                    </button>
+                    {platformSubTab === 'empresas' ? (
+                        <>
+                            <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+                                <div>
+                                    <h2 className="text-lg font-bold text-slate-900">Gestión de Empresas (SaaS)</h2>
+                                    <p className="text-sm text-slate-500">Administra todos los negocios registrados en la plataforma</p>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setEditingEmpresa({
+                                            nombre: '',
+                                            ruc: '',
+                                            direccion_matriz: '',
+                                            config_iva: 15,
+                                            config_propina: 10,
+                                            activo: true
+                                        })
+                                        setIsEmpresaModalOpen(true)
+                                    }}
+                                    className="btn btn-primary py-2 px-4 text-sm flex items-center gap-2"
+                                >
+                                    <Plus className="w-4 h-4" /> Nueva Empresa
+                                </button>
+                            </div>
+
+                            <div className="card overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full">
+                                        <thead className="bg-slate-50 border-b border-slate-200">
+                                            <tr>
+                                                <th className="px-6 py-4 text-left text-xs font-black text-slate-500 uppercase tracking-wider">Empresa</th>
+                                                <th className="px-6 py-4 text-left text-xs font-black text-slate-500 uppercase tracking-wider">RUC</th>
+                                                <th className="px-6 py-4 text-left text-xs font-black text-slate-500 uppercase tracking-wider">Dirección</th>
+                                                <th className="px-6 py-4 text-left text-xs font-black text-slate-500 uppercase tracking-wider">IVA</th>
+                                                <th className="px-6 py-4 text-left text-xs font-black text-slate-500 uppercase tracking-wider">Propina</th>
+                                                <th className="px-6 py-4 text-left text-xs font-black text-slate-500 uppercase tracking-wider">Estado</th>
+                                                <th className="px-6 py-4 text-right text-xs font-black text-slate-500 uppercase tracking-wider">Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {allEmpresas
+                                                .sort((a, b) => {
+                                                    // Billennium always first
+                                                    if (a.nombre === 'Billennium') return -1
+                                                    if (b.nombre === 'Billennium') return 1
+                                                    return a.nombre.localeCompare(b.nombre)
+                                                })
+                                                .map(emp => (
+                                                    <tr
+                                                        key={emp.id}
+                                                        className={cn(
+                                                            "hover:bg-slate-50 transition-colors",
+                                                            emp.nombre === 'Billennium' && "bg-amber-50/30"
+                                                        )}
+                                                    >
+                                                        <td className="px-6 py-4">
+                                                            <div className="flex items-center gap-3">
+                                                                {emp.logo_url && (
+                                                                    <img src={emp.logo_url} alt={emp.nombre} className="w-8 h-8 object-contain rounded" />
+                                                                )}
+                                                                <div>
+                                                                    <p className="font-bold text-slate-900">{emp.nombre}</p>
+                                                                    {emp.nombre === 'Billennium' && (
+                                                                        <span className="inline-block mt-1 px-2 py-0.5 bg-amber-100 text-amber-700 text-[10px] font-black rounded-full uppercase">
+                                                                            Admin Platform
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-sm text-slate-600">{emp.ruc || 'N/A'}</td>
+                                                        <td className="px-6 py-4 text-sm text-slate-600 max-w-xs truncate">{emp.direccion_matriz || 'N/A'}</td>
+                                                        <td className="px-6 py-4 text-sm text-slate-600">{emp.config_iva}%</td>
+                                                        <td className="px-6 py-4 text-sm text-slate-600">{emp.config_propina}%</td>
+                                                        <td className="px-6 py-4">
+                                                            <span className={cn(
+                                                                "px-2 py-1 text-xs font-bold rounded-full",
+                                                                emp.activo !== false ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"
+                                                            )}>
+                                                                {emp.activo !== false ? 'Activo' : 'Inactivo'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 text-right">
+                                                            <div className="flex items-center justify-end gap-2">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setEditingEmpresa(emp)
+                                                                        setIsEmpresaModalOpen(true)
+                                                                    }}
+                                                                    className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-primary-600 transition-colors"
+                                                                    title="Editar"
+                                                                >
+                                                                    <Edit2 className="w-4 h-4" />
+                                                                </button>
+                                                                {emp.nombre !== 'Billennium' && (
+                                                                    <button
+                                                                        onClick={() => handleDeleteEmpresa(emp.id)}
+                                                                        className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-red-600 transition-colors"
+                                                                        title="Desactivar"
+                                                                    >
+                                                                        <Trash2 className="w-4 h-4" />
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
-                        ))}
-                    </div>
+                        </>
+                    ) : (
+                        <>
+                            <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+                                <div>
+                                    <h2 className="text-lg font-bold text-slate-900">Personal de Oficina</h2>
+                                    <p className="text-sm text-slate-500">Administra los usuarios con rol de Oficina para cada empresa</p>
+                                </div>
+                                <button
+                                    onClick={() => {
+                                        setEditingStaff({ rol: 'oficina' })
+                                        setIsStaffModalOpen(true)
+                                    }}
+                                    className="btn btn-primary py-2 px-4 text-sm flex items-center gap-2"
+                                >
+                                    <Plus className="w-4 h-4" /> Nuevo Usuario Oficina
+                                </button>
+                            </div>
+
+                            <div className="card overflow-hidden">
+                                <div className="overflow-x-auto">
+                                    <table className="w-full">
+                                        <thead className="bg-slate-50 border-b border-slate-200">
+                                            <tr>
+                                                <th className="px-6 py-4 text-left text-xs font-black text-slate-500 uppercase tracking-wider">Nombre</th>
+                                                <th className="px-6 py-4 text-left text-xs font-black text-slate-500 uppercase tracking-wider">Email</th>
+                                                <th className="px-6 py-4 text-left text-xs font-black text-slate-500 uppercase tracking-wider">Empresa</th>
+                                                <th className="px-6 py-4 text-left text-xs font-black text-slate-500 uppercase tracking-wider">Estado</th>
+                                                <th className="px-6 py-4 text-right text-xs font-black text-slate-500 uppercase tracking-wider">Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100">
+                                            {oficinaUsers.map(user => (
+                                                <tr key={user.id} className="hover:bg-slate-50 transition-colors">
+                                                    <td className="px-6 py-4">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-10 h-10 bg-primary-100 text-primary-600 rounded-full flex items-center justify-center font-black">
+                                                                {user.nombre?.[0] || 'U'}
+                                                            </div>
+                                                            <p className="font-bold text-slate-900">{user.nombre || 'Sin nombre'}</p>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-sm text-slate-600">{user.email || 'N/A'}</td>
+                                                    <td className="px-6 py-4 text-sm text-slate-600">
+                                                        {(user as any).empresas?.nombre || 'N/A'}
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <span className={cn(
+                                                            "px-2 py-1 text-xs font-bold rounded-full",
+                                                            user.estado === 'activo' ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"
+                                                        )}>
+                                                            {user.estado === 'activo' ? 'Activo' : 'Inactivo'}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right">
+                                                        <div className="flex items-center justify-end gap-2">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setEditingStaff(user)
+                                                                    setIsStaffModalOpen(true)
+                                                                }}
+                                                                className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-primary-600 transition-colors"
+                                                                title="Editar"
+                                                            >
+                                                                <Edit2 className="w-4 h-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleDeleteStaff(user.id)}
+                                                                className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-red-600 transition-colors"
+                                                                title="Eliminar"
+                                                            >
+                                                                <Trash2 className="w-4 h-4" />
+                                                            </button>
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </>
+                    )}
                 </div>
             )}
 
             {/* Modals */}
             {isEmpresaModalOpen && (
-                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 space-y-6">
-                        <h2 className="text-xl font-bold">{editingEmpresa?.id ? 'Editar' : 'Nueva'} Empresa</h2>
-                        <input
-                            type="text" placeholder="Nombre" className="w-full px-4 py-3 rounded-xl border"
-                            value={editingEmpresa?.nombre || ''}
-                            onChange={e => setEditingEmpresa({ ...editingEmpresa, nombre: e.target.value })}
-                        />
-                        <input
-                            type="text" placeholder="RUC" className="w-full px-4 py-3 rounded-xl border"
-                            value={editingEmpresa?.ruc || ''}
-                            onChange={e => setEditingEmpresa({ ...editingEmpresa, ruc: e.target.value })}
-                        />
-                        <div className="flex gap-4">
-                            <button onClick={() => setIsEmpresaModalOpen(false)} className="flex-1 py-3 font-bold border rounded-xl">Cancelar</button>
-                            <button onClick={handleSaveEmpresaFull} className="flex-1 py-3 font-bold bg-primary-600 text-white rounded-xl">Guardar</button>
+                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-8 space-y-6 my-8">
+                        <div className="flex justify-between items-center">
+                            <h2 className="text-2xl font-bold">{editingEmpresa?.id ? 'Editar' : 'Nueva'} Empresa</h2>
+                            <button onClick={() => setIsEmpresaModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400">
+                                <X className="w-6 h-6" />
+                            </button>
                         </div>
-                    </div>
-                </div>
-            )}
 
-            {isStaffModalOpen && (
-                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 space-y-6">
-                        <h2 className="text-xl font-bold">{editingStaff?.id ? 'Editar' : 'Nuevo'} Miembro</h2>
-                        <p className="text-xs text-slate-500">Empresa: {empresa?.nombre}</p>
-                        <input
-                            type="text" placeholder="Nombre" className="w-full px-4 py-3 rounded-xl border"
-                            value={editingStaff?.nombre || ''}
-                            onChange={e => setEditingStaff({ ...editingStaff, nombre: e.target.value })}
-                        />
-                        <select
-                            className="w-full px-4 py-3 rounded-xl border bg-white"
-                            value={editingStaff?.rol || 'mesero'}
-                            onChange={e => setEditingStaff({ ...editingStaff, rol: e.target.value as any })}
-                        >
-                            <option value="mesero">Mesero / Servicio</option>
-                            <option value="oficina">Administrador / Oficina</option>
-                            <option value="cocina">Personal de Cocina</option>
-                        </select>
-                        <input
-                            type="text" maxLength={4} placeholder="PIN (4 dígitos)" className="w-full px-4 py-3 rounded-xl border font-mono text-center"
-                            value={editingStaff?.pin || ''}
-                            onChange={e => setEditingStaff({ ...editingStaff, pin: e.target.value.replace(/\D/g, '') })}
-                        />
-                        <div className="flex gap-4">
-                            <button onClick={() => setIsStaffModalOpen(false)} className="flex-1 py-3 font-bold border rounded-xl">Cancelar</button>
-                            <button onClick={handleSaveStaffMember} className="flex-1 py-3 font-bold bg-primary-600 text-white rounded-xl">Guardar</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-            {isMesaModalOpen && (
-                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 space-y-6">
-                        <h2 className="text-xl font-bold">{editingMesa?.id ? 'Editar' : 'Nueva'} Mesa</h2>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase">Número / Nombre</label>
-                                <input
-                                    type="text" placeholder="Ej: 01, Barra 1, VIP..." className="w-full px-4 py-3 rounded-xl border mt-1"
-                                    value={editingMesa?.numero || ''}
-                                    onChange={e => setEditingMesa({ ...editingMesa, numero: e.target.value })}
-                                />
-                            </div>
-                            <div>
-                                <label className="text-xs font-bold text-slate-500 uppercase">Capacidad (Personas)</label>
-                                <div className="flex gap-2 mt-1">
-                                    {[2, 4, 6, 8, 10].map(n => (
-                                        <button
-                                            key={n}
-                                            type="button"
-                                            onClick={() => setEditingMesa({ ...editingMesa, capacidad: n })}
-                                            className={cn(
-                                                "w-10 h-10 rounded-lg font-bold border flex items-center justify-center transition-all",
-                                                editingMesa?.capacidad === n ? "bg-primary-600 text-white border-primary-600" : "bg-white text-slate-500 hover:border-slate-300"
-                                            )}
-                                        >
-                                            {n}
-                                        </button>
-                                    ))}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Nombre Comercial</label>
+                                    <input
+                                        type="text" placeholder="Nombre de la empresa" className="w-full px-4 py-3 rounded-xl border mt-1"
+                                        value={editingEmpresa?.nombre || ''}
+                                        onChange={e => setEditingEmpresa({ ...editingEmpresa, nombre: e.target.value })}
+                                    />
                                 </div>
-                                <input
-                                    type="number" placeholder="Otra..." className="w-full px-4 py-2 rounded-xl border mt-2 text-sm"
-                                    value={editingMesa?.capacidad || ''}
-                                    onChange={e => setEditingMesa({ ...editingMesa, capacidad: parseInt(e.target.value) })}
-                                />
+                                <div>
+                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">RUC</label>
+                                    <input
+                                        type="text" placeholder="Número de RUC" className="w-full px-4 py-3 rounded-xl border mt-1"
+                                        value={editingEmpresa?.ruc || ''}
+                                        onChange={e => setEditingEmpresa({ ...editingEmpresa, ruc: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Dirección Matriz</label>
+                                    <input
+                                        type="text" placeholder="Ciudad, Calle, Edificio..." className="w-full px-4 py-3 rounded-xl border mt-1"
+                                        value={editingEmpresa?.direccion_matriz || ''}
+                                        onChange={e => setEditingEmpresa({ ...editingEmpresa, direccion_matriz: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">IVA (%)</label>
+                                        <input
+                                            type="number" className="w-full px-4 py-3 rounded-xl border mt-1"
+                                            value={editingEmpresa?.config_iva || 15}
+                                            onChange={e => setEditingEmpresa({ ...editingEmpresa, config_iva: parseFloat(e.target.value) })}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Propina (%)</label>
+                                        <input
+                                            type="number" className="w-full px-4 py-3 rounded-xl border mt-1"
+                                            value={editingEmpresa?.config_propina || 10}
+                                            onChange={e => setEditingEmpresa({ ...editingEmpresa, config_propina: parseFloat(e.target.value) })}
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Estado</label>
+                                    <select
+                                        className="w-full px-4 py-3 rounded-xl border mt-1 bg-white"
+                                        value={editingEmpresa?.activo === false ? 'inactivo' : 'activo'}
+                                        onChange={e => setEditingEmpresa({ ...editingEmpresa, activo: e.target.value === 'activo' })}
+                                    >
+                                        <option value="activo">Activo</option>
+                                        <option value="inactivo">No Activo</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Logo (Upload)</label>
+                                    <input
+                                        type="file" accept="image/*"
+                                        className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 mt-2"
+                                        onChange={async (e) => {
+                                            const file = e.target.files?.[0]
+                                            if (!file || !editingEmpresa?.id) {
+                                                if (!editingEmpresa?.id) alert('Guarde la empresa primero para subir un logo.')
+                                                return
+                                            }
+                                            try {
+                                                const url = await sriService.uploadLogo(editingEmpresa.id, file)
+                                                setEditingEmpresa({ ...editingEmpresa, logo_url: url })
+                                            } catch (err: any) {
+                                                alert('Error al subir logo: ' + err.message)
+                                            }
+                                        }}
+                                    />
+                                </div>
                             </div>
                         </div>
-                        <div className="flex gap-4 pt-2">
-                            <button onClick={() => setIsMesaModalOpen(false)} className="flex-1 py-3 font-bold border rounded-xl">Cancelar</button>
-                            <button onClick={handleSaveMesa} className="flex-1 py-3 font-bold bg-primary-600 text-white rounded-xl">Guardar</button>
+
+                        <div className="flex gap-4 pt-4">
+                            <button onClick={() => setIsEmpresaModalOpen(false)} className="flex-1 py-4 font-bold border rounded-2xl hover:bg-slate-50 transition-colors">Cancelar</button>
+                            <button
+                                onClick={handleSaveEmpresaFull}
+                                disabled={saving}
+                                className="flex-1 py-4 font-bold bg-primary-600 text-white rounded-2xl hover:bg-primary-700 transition-colors flex items-center justify-center gap-2"
+                            >
+                                {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" /> Guardar Empresa</>}
+                            </button>
                         </div>
                     </div>
                 </div>
-            )}
+            )
+            }
+
+            {
+                isStaffModalOpen && (
+                    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col overflow-hidden">
+                            <div className="p-8 border-b border-slate-100">
+                                <h2 className="text-xl font-bold">{editingStaff?.id ? 'Editar' : 'Nuevo'} Miembro</h2>
+                            </div>
+
+                            <div className="p-8 pt-6 space-y-6 overflow-y-auto flex-1">
+                                {profile?.rol === 'admin_plataforma' ? (
+                                    <div className="space-y-4">
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Empresa Destino</label>
+                                        <select
+                                            className="w-full px-4 py-3 rounded-xl border bg-white"
+                                            value={editingStaff?.empresa_id || ''}
+                                            onChange={e => setEditingStaff({ ...editingStaff, empresa_id: e.target.value })}
+                                        >
+                                            <option value="">Seleccione empresa...</option>
+                                            {allEmpresas.map(emp => (
+                                                <option key={emp.id} value={emp.id}>{emp.nombre}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-slate-500">Empresa: {empresa?.nombre}</p>
+                                )}
+                                <input
+                                    type="text" placeholder="Nombre" className="w-full px-4 py-3 rounded-xl border"
+                                    value={editingStaff?.nombre || ''}
+                                    onChange={e => setEditingStaff({ ...editingStaff, nombre: e.target.value })}
+                                />
+                                <input
+                                    type="email" placeholder="Correo Electrónico (Usuario)" className="w-full px-4 py-3 rounded-xl border"
+                                    value={editingStaff?.email || ''}
+                                    onChange={e => setEditingStaff({ ...editingStaff, email: e.target.value })}
+                                />
+                                {!editingStaff?.id && (
+                                    <input
+                                        type="password"
+                                        placeholder="Contraseña Inicial"
+                                        className="w-full px-4 py-3 rounded-xl border font-mono"
+                                        value={editingStaff?.password || ''}
+                                        onChange={e => setEditingStaff({ ...editingStaff, password: e.target.value })}
+                                    />
+                                )}
+                                {profile?.rol === 'admin_plataforma' ? (
+                                    <div className="bg-primary-50 p-4 rounded-xl border border-primary-100 text-xs font-bold text-primary-700 uppercase tracking-widest flex items-center gap-2">
+                                        <Shield className="w-4 h-4" /> Rol: Administrador de Oficina
+                                    </div>
+                                ) : profile?.rol === 'oficina' ? (
+                                    <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                                        <Shield className="w-4 h-4" /> Rol: Mesero (Automático)
+                                    </div>
+                                ) : (
+                                    <select
+                                        className="w-full px-4 py-3 rounded-xl border bg-white"
+                                        value={editingStaff?.rol || 'mesero'}
+                                        onChange={e => setEditingStaff({ ...editingStaff, rol: e.target.value as any })}
+                                    >
+                                        <option value="mesero">Mesero / Servicio</option>
+                                        <option value="oficina">Administrador / Oficina</option>
+                                        <option value="cocina">Personal de Cocina</option>
+                                    </select>
+                                )}
+
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Estado</label>
+                                    <select
+                                        className="w-full px-4 py-3 rounded-xl border bg-white"
+                                        value={editingStaff?.estado || 'activo'}
+                                        onChange={e => setEditingStaff({ ...editingStaff, estado: e.target.value as any })}
+                                    >
+                                        <option value="activo">Activo</option>
+                                        <option value="baja">Baja</option>
+                                    </select>
+                                </div>
+
+                                {editingStaff?.estado === 'baja' && (
+                                    <div className="space-y-4 p-4 bg-red-50 rounded-2xl border border-red-100 animate-in fade-in slide-in-from-top-2">
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-red-400 uppercase tracking-widest">Fecha de Baja</label>
+                                            <input
+                                                type="date"
+                                                className="w-full px-4 py-2 rounded-lg border border-red-200 outline-none focus:ring-2 focus:ring-red-500"
+                                                value={editingStaff?.fecha_baja || ''}
+                                                onChange={e => setEditingStaff({ ...editingStaff, fecha_baja: e.target.value })}
+                                            />
+                                        </div>
+                                        <div className="space-y-1">
+                                            <label className="text-[10px] font-black text-red-400 uppercase tracking-widest">Motivo de Baja</label>
+                                            <textarea
+                                                className="w-full px-4 py-2 rounded-lg border border-red-200 outline-none focus:ring-2 focus:ring-red-500 text-sm"
+                                                placeholder="Describa el motivo..."
+                                                rows={2}
+                                                value={editingStaff?.motivo_baja || ''}
+                                                onChange={e => setEditingStaff({ ...editingStaff, motivo_baja: e.target.value })}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                <input
+                                    type="text" maxLength={4} placeholder="PIN (4 dígitos)" className="w-full px-4 py-3 rounded-xl border font-mono text-center"
+                                    value={editingStaff?.pin || ''}
+                                    onChange={e => setEditingStaff({ ...editingStaff, pin: e.target.value.replace(/\D/g, '') })}
+                                />
+                            </div>
+
+                            <div className="p-8 bg-slate-50 flex gap-4 border-t border-slate-100">
+                                <button onClick={() => setIsStaffModalOpen(false)} className="flex-1 py-3 font-bold bg-white border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors">Cancelar</button>
+                                <button onClick={handleSaveStaffMember} className="flex-1 py-3 font-bold bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors">Guardar</button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+            {
+                isMesaModalOpen && (
+                    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 space-y-6">
+                            <h2 className="text-xl font-bold">{editingMesa?.id ? 'Editar' : 'Nueva'} Mesa</h2>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 uppercase">Número / Nombre</label>
+                                    <input
+                                        type="text" placeholder="Ej: 01, Barra 1, VIP..." className="w-full px-4 py-3 rounded-xl border mt-1"
+                                        value={editingMesa?.numero || ''}
+                                        onChange={e => setEditingMesa({ ...editingMesa, numero: e.target.value })}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-bold text-slate-500 uppercase">Capacidad (Personas)</label>
+                                    <div className="flex gap-2 mt-1">
+                                        {[2, 4, 6, 8, 10].map(n => (
+                                            <button
+                                                key={n}
+                                                type="button"
+                                                onClick={() => setEditingMesa({ ...editingMesa, capacidad: n })}
+                                                className={cn(
+                                                    "w-10 h-10 rounded-lg font-bold border flex items-center justify-center transition-all",
+                                                    editingMesa?.capacidad === n ? "bg-primary-600 text-white border-primary-600" : "bg-white text-slate-500 hover:border-slate-300"
+                                                )}
+                                            >
+                                                {n}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <input
+                                        type="number" placeholder="Otra..." className="w-full px-4 py-2 rounded-xl border mt-2 text-sm"
+                                        value={editingMesa?.capacidad || ''}
+                                        onChange={e => setEditingMesa({ ...editingMesa, capacidad: parseInt(e.target.value) })}
+                                    />
+                                </div>
+                            </div>
+                            <div className="flex gap-4 pt-2">
+                                <button onClick={() => setIsMesaModalOpen(false)} className="flex-1 py-3 font-bold border rounded-xl">Cancelar</button>
+                                <button onClick={handleSaveMesa} className="flex-1 py-3 font-bold bg-primary-600 text-white rounded-xl">Guardar</button>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
         </div>
     )
 }

@@ -98,7 +98,7 @@ export const pedidoService = {
                 mesas (numero),
                 pedido_detalles (
                     *,
-                    productos (nombre, codigo)
+                    productos (nombre)
                 )
             `)
             .eq('empresa_id', empresaId)
