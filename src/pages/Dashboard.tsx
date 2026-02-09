@@ -44,7 +44,7 @@ function StatCard({ label, value, icon: Icon, trend, trendValue }: any) {
 
 
 export function Dashboard() {
-    const { empresa, profile } = useAuth()
+    const { empresa } = useAuth()
     const [seeding, setSeeding] = useState(false)
     const [stats, setStats] = useState({
         totalVentas: 0,
