@@ -48,16 +48,6 @@ export function WaiterTableListMobile({
         atendida: 'bg-blue-100 border-blue-300 text-blue-800',
     }
 
-    if (loading) {
-        return (
-            <div className="space-y-4 p-4">
-                {[1, 2, 3, 4].map(i => (
-                    <div key={i} className="h-24 bg-slate-100 rounded-xl animate-pulse" />
-                ))}
-            </div>
-        )
-    }
-
     return (
         <div className="pb-20 bg-slate-50 min-h-screen">
             {/* Sticky Header Filters */}
@@ -80,55 +70,63 @@ export function WaiterTableListMobile({
                 </div>
             </div>
 
-            {/* List */}
-            <div className="p-4 space-y-4">
-                {filteredMesas.map((mesa) => {
-                    const reserva = getMesaReserva(mesa.id)
-                    const ambientEstado = (mesa.estado === 'libre' && reserva) ? 'reservada' : mesa.estado
-                    const colorClass = statusColors[ambientEstado] || 'bg-slate-100 border-slate-300 text-slate-800'
+            {/* Content Container with conditional loading */}
+            {loading ? (
+                <div className="space-y-4 p-4">
+                    {[1, 2, 3, 4, 5, 6].map(i => (
+                        <div key={i} className="h-40 bg-slate-100 rounded-2xl animate-pulse border-2 border-slate-200/50" />
+                    ))}
+                </div>
+            ) : (
+                <div className="p-4 space-y-4">
+                    {filteredMesas.map((mesa) => {
+                        const reserva = getMesaReserva(mesa.id)
+                        const ambientEstado = (mesa.estado === 'libre' && reserva) ? 'reservada' : mesa.estado
+                        const colorClass = statusColors[ambientEstado] || 'bg-slate-100 border-slate-300 text-slate-800'
 
-                    return (
-                        <button
-                            key={mesa.id}
-                            onClick={() => onMesaClick(mesa)}
-                            className={cn(
-                                "w-full text-left rounded-2xl border-2 p-5 transition-transform active:scale-95 shadow-sm relative overflow-hidden",
-                                colorClass
-                            )}
-                        >
-                            <div className="flex justify-between items-center mb-2">
-                                <span className="text-4xl font-black tracking-tight opacity-90">
-                                    {mesa.numero}
-                                </span>
-                                <div className="flex flex-col items-end">
-                                    <span className="text-xs font-bold uppercase tracking-wider opacity-60">
-                                        {ambientEstado === 'libre' ? 'Disponible' : ambientEstado}
+                        return (
+                            <button
+                                key={mesa.id}
+                                onClick={() => onMesaClick(mesa)}
+                                className={cn(
+                                    "w-full text-left rounded-2xl border-2 p-5 transition-transform active:scale-95 shadow-sm relative overflow-hidden",
+                                    colorClass
+                                )}
+                            >
+                                <div className="flex justify-between items-center mb-2">
+                                    <span className="text-4xl font-black tracking-tight opacity-90">
+                                        {mesa.numero}
                                     </span>
-                                    {reserva && (
-                                        <div className="mt-1 flex items-center gap-1 text-[10px] bg-white/50 px-2 py-0.5 rounded-full font-bold">
-                                            <Clock className="w-3 h-3" />
-                                            {new Date(reserva.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                        </div>
-                                    )}
+                                    <div className="flex flex-col items-end">
+                                        <span className="text-xs font-bold uppercase tracking-wider opacity-60">
+                                            {ambientEstado === 'libre' ? 'Disponible' : ambientEstado}
+                                        </span>
+                                        {reserva && (
+                                            <div className="mt-1 flex items-center gap-1 text-[10px] bg-white/50 px-2 py-0.5 rounded-full font-bold">
+                                                <Clock className="w-3 h-3" />
+                                                {new Date(reserva.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
 
-                            <div className="flex items-center gap-2 opacity-60 text-sm font-medium">
-                                <Users className="w-4 h-4" />
-                                <span>Capacidad: {mesa.capacidad}</span>
-                            </div>
+                                <div className="flex items-center gap-2 opacity-60 text-sm font-medium">
+                                    <Users className="w-4 h-4" />
+                                    <span>Capacidad: {mesa.capacidad}</span>
+                                </div>
 
-                            {/* Touch feedback ripple effect could go here */}
-                        </button>
-                    )
-                })}
+                                {/* Touch feedback ripple effect could go here */}
+                            </button>
+                        )
+                    })}
 
-                {mesas.length === 0 && (
-                    <div className="text-center py-10 text-slate-400">
-                        <p>No hay mesas configuradas.</p>
-                    </div>
-                )}
-            </div>
+                    {mesas.length === 0 && (
+                        <div className="text-center py-10 text-slate-400">
+                            <p>No hay mesas configuradas.</p>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     )
 }

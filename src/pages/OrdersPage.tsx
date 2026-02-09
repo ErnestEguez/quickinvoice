@@ -52,6 +52,28 @@ export function OrdersPage() {
         console.log('OrdersPage - Current Empresa:', empresa)
         if (empresa?.id) {
             loadPedidos()
+
+            // Suscribir a cambios en tiempo real para mantener sincronizados laptop y móvil
+            const channel = supabase
+                .channel(`pedidos-realtime-${empresa.id}`)
+                .on(
+                    'postgres_changes',
+                    {
+                        event: '*',
+                        schema: 'public',
+                        table: 'pedidos',
+                        filter: `empresa_id=eq.${empresa.id}`
+                    },
+                    (payload) => {
+                        console.log('🔄 Real-time Update Received:', payload.eventType)
+                        loadPedidos()
+                    }
+                )
+                .subscribe()
+
+            return () => {
+                supabase.removeChannel(channel)
+            }
         }
     }, [empresa?.id])
 
@@ -245,14 +267,6 @@ export function OrdersPage() {
         )
     }
 
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center p-12">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-            </div>
-        )
-    }
-
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
@@ -284,136 +298,142 @@ export function OrdersPage() {
                 </div>
             )}
 
-            <div className="grid grid-cols-1 gap-4">
-                {!error && pedidos.length === 0 ? (
-                    <div className="card p-12 text-center text-slate-500">
-                        No hay pedidos registrados aún.
-                    </div>
-                ) : (
-                    pedidos.map((pedido) => (
-                        <div key={pedido.id} className="card overflow-hidden">
-                            <div className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center font-bold text-slate-700">
-                                        #{pedido.mesas?.numero || '?'}
-                                    </div>
-                                    <div>
-                                        <div className="flex items-center gap-2">
-                                            <span className="font-bold text-slate-900 text-lg">
-                                                Pedido #{pedido.id.slice(0, 6)}
-                                            </span>
-                                            <span className={cn(
-                                                "px-2.5 py-0.5 rounded-full text-xs font-bold border uppercase",
-                                                getStatusStyles(pedido.estado)
-                                            )}>
-                                                {pedido.estado.replace('_', ' ')}
-                                            </span>
+            {loading && pedidos.length === 0 ? (
+                <div className="flex items-center justify-center p-12">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 gap-4">
+                    {pedidos.length === 0 && !loading ? (
+                        <div className="card p-12 text-center text-slate-500">
+                            No hay pedidos registrados aún.
+                        </div>
+                    ) : (
+                        pedidos.map((pedido) => (
+                            <div key={pedido.id} className="card overflow-hidden">
+                                <div className="p-4 sm:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                                    <div className="flex items-center gap-4">
+                                        <div className="w-12 h-12 bg-slate-100 rounded-xl flex items-center justify-center font-bold text-slate-700">
+                                            #{pedido.mesas?.numero || '?'}
                                         </div>
-                                        <div className="flex items-center gap-4 mt-1">
-                                            <span className="text-sm text-slate-500 flex items-center gap-1">
-                                                <Clock className="w-3.5 h-3.5" />
-                                                {formatTime(pedido.created_at)}
-                                            </span>
-                                            <span className="text-sm font-bold text-primary-600">
-                                                {formatCurrency(pedido.total)}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="flex items-center gap-2">
-                                    {pedido.estado === 'pendiente' && (
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => handleUpdateStatus(pedido.id, 'en_preparacion')}
-                                                className="btn bg-blue-600 hover:bg-blue-700 text-white text-sm py-2 px-4 flex items-center gap-2"
-                                            >
-                                                <ChefHat className="w-4 h-4" />
-                                                Preparar
-                                            </button>
-                                        </div>
-                                    )}
-                                    {pedido.estado === 'en_preparacion' && (
-                                        <button
-                                            onClick={() => handleUpdateStatus(pedido.id, 'atendido')}
-                                            className="btn bg-emerald-600 hover:bg-emerald-700 text-white text-sm py-2 px-4 flex items-center gap-2"
-                                        >
-                                            <CheckCircle2 className="w-4 h-4" />
-                                            Servido
-                                        </button>
-                                    )}
-                                    {pedido.estado === 'facturado' && (
-                                        <Link
-                                            to="/facturacion"
-                                            className="btn bg-slate-600 hover:bg-slate-700 text-white text-sm py-2 px-4 flex items-center gap-2"
-                                        >
-                                            <CheckCircle2 className="w-4 h-4" />
-                                            Ver Factura
-                                        </Link>
-                                    )}
-                                    {pedido.estado === 'atendido' && profile?.rol === 'oficina' && (
-                                        <button
-                                            onClick={() => handleOpenInvoiceModal(pedido)}
-                                            className="btn bg-amber-600 hover:bg-amber-700 text-white text-sm py-2 px-4 flex items-center gap-2"
-                                        >
-                                            <CreditCard className="w-4 h-4" />
-                                            Facturar
-                                        </button>
-                                    )}
-                                    <Link
-                                        to={`/pedido/${pedido.id}/kitchen`}
-                                        title="Imprimir Comanda Cocina"
-                                        className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-500"
-                                    >
-                                        <Printer className="w-5 h-5" />
-                                    </Link>
-                                    <button
-                                        onClick={() => setExpandedPedido(expandedPedido === pedido.id ? null : pedido.id)}
-                                        className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-500"
-                                    >
-                                        {expandedPedido === pedido.id ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Actions Footer for Cancel - Only for Oficina/Admin */}
-                            {profile?.rol !== 'mesero' && (
-                                <div className="px-6 pb-2">
-                                    <button
-                                        onClick={() => handleResetMesa(pedido)}
-                                        className="text-xs text-red-400 hover:text-red-600 underline flex items-center gap-1"
-                                    >
-                                        <Trash2 className="w-3 h-3" /> Resetear Mesa / Cancelar Pedido
-                                    </button>
-                                </div>
-                            )}
-
-                            {expandedPedido === pedido.id && (
-                                <div className="bg-slate-50 border-t border-slate-100 p-4 sm:p-6">
-                                    <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Detalle del Pedido</h4>
-                                    <div className="space-y-3">
-                                        {(pedido.pedido_detalles || []).map((detalle: any) => (
-                                            <div key={detalle.id} className="flex justify-between items-center text-sm">
-                                                <div className="flex items-center gap-3">
-                                                    <span className="font-bold text-slate-900 w-6">{detalle.cantidad}x</span>
-                                                    <span className="text-slate-700">{detalle.productos?.nombre}</span>
-                                                </div>
-                                                <span className="text-slate-500 font-medium whitespace-nowrap">
-                                                    {formatCurrency(detalle.precio_unitario * detalle.cantidad)}
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-bold text-slate-900 text-lg">
+                                                    Pedido #{pedido.id.slice(0, 6)}
+                                                </span>
+                                                <span className={cn(
+                                                    "px-2.5 py-0.5 rounded-full text-xs font-bold border uppercase",
+                                                    getStatusStyles(pedido.estado)
+                                                )}>
+                                                    {pedido.estado.replace('_', ' ')}
                                                 </span>
                                             </div>
-                                        ))}
+                                            <div className="flex items-center gap-4 mt-1">
+                                                <span className="text-sm text-slate-500 flex items-center gap-1">
+                                                    <Clock className="w-3.5 h-3.5" />
+                                                    {formatTime(pedido.created_at)}
+                                                </span>
+                                                <span className="text-sm font-bold text-primary-600">
+                                                    {formatCurrency(pedido.total)}
+                                                </span>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="mt-6 pt-4 border-t border-slate-200 flex justify-between items-center font-bold text-slate-900">
-                                        <span>Total</span>
-                                        <span className="text-lg">{formatCurrency(pedido.total)}</span>
+
+                                    <div className="flex items-center gap-2">
+                                        {pedido.estado === 'pendiente' && (
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => handleUpdateStatus(pedido.id, 'en_preparacion')}
+                                                    className="btn bg-blue-600 hover:bg-blue-700 text-white text-sm py-2 px-4 flex items-center gap-2"
+                                                >
+                                                    <ChefHat className="w-4 h-4" />
+                                                    Preparar
+                                                </button>
+                                            </div>
+                                        )}
+                                        {pedido.estado === 'en_preparacion' && (
+                                            <button
+                                                onClick={() => handleUpdateStatus(pedido.id, 'atendido')}
+                                                className="btn bg-emerald-600 hover:bg-emerald-700 text-white text-sm py-2 px-4 flex items-center gap-2"
+                                            >
+                                                <CheckCircle2 className="w-4 h-4" />
+                                                Servido
+                                            </button>
+                                        )}
+                                        {pedido.estado === 'facturado' && (
+                                            <Link
+                                                to="/facturacion"
+                                                className="btn bg-slate-600 hover:bg-slate-700 text-white text-sm py-2 px-4 flex items-center gap-2"
+                                            >
+                                                <CheckCircle2 className="w-4 h-4" />
+                                                Ver Factura
+                                            </Link>
+                                        )}
+                                        {pedido.estado === 'atendido' && profile?.rol === 'oficina' && (
+                                            <button
+                                                onClick={() => handleOpenInvoiceModal(pedido)}
+                                                className="btn bg-amber-600 hover:bg-amber-700 text-white text-sm py-2 px-4 flex items-center gap-2"
+                                            >
+                                                <CreditCard className="w-4 h-4" />
+                                                Facturar
+                                            </button>
+                                        )}
+                                        <Link
+                                            to={`/pedido/${pedido.id}/kitchen`}
+                                            title="Imprimir Comanda Cocina"
+                                            className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-500"
+                                        >
+                                            <Printer className="w-5 h-5" />
+                                        </Link>
+                                        <button
+                                            onClick={() => setExpandedPedido(expandedPedido === pedido.id ? null : pedido.id)}
+                                            className="p-2 hover:bg-slate-100 rounded-lg transition-colors text-slate-500"
+                                        >
+                                            {expandedPedido === pedido.id ? <ChevronUp className="w-5 h-5" /> : <ChevronDown className="w-5 h-5" />}
+                                        </button>
                                     </div>
                                 </div>
-                            )}
-                        </div>
-                    ))
-                )}
-            </div>
+
+                                {/* Actions Footer for Cancel - Only for Oficina/Admin */}
+                                {profile?.rol !== 'mesero' && (
+                                    <div className="px-6 pb-2">
+                                        <button
+                                            onClick={() => handleResetMesa(pedido)}
+                                            className="text-xs text-red-400 hover:text-red-600 underline flex items-center gap-1"
+                                        >
+                                            <Trash2 className="w-3 h-3" /> Resetear Mesa / Cancelar Pedido
+                                        </button>
+                                    </div>
+                                )}
+
+                                {expandedPedido === pedido.id && (
+                                    <div className="bg-slate-50 border-t border-slate-100 p-4 sm:p-6">
+                                        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Detalle del Pedido</h4>
+                                        <div className="space-y-3">
+                                            {(pedido.pedido_detalles || []).map((detalle: any) => (
+                                                <div key={detalle.id} className="flex justify-between items-center text-sm">
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="font-bold text-slate-900 w-6">{detalle.cantidad}x</span>
+                                                        <span className="text-slate-700">{detalle.productos?.nombre}</span>
+                                                    </div>
+                                                    <span className="text-slate-500 font-medium whitespace-nowrap">
+                                                        {formatCurrency(detalle.precio_unitario * detalle.cantidad)}
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                        <div className="mt-6 pt-4 border-t border-slate-200 flex justify-between items-center font-bold text-slate-900">
+                                            <span>Total</span>
+                                            <span className="text-lg">{formatCurrency(pedido.total)}</span>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ))
+                    )}
+                </div>
+            )}
 
             {/* Modal de Facturación con Pagos Combinados */}
             {isInvoiceModalOpen && selectedPedido && (

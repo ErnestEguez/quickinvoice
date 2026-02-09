@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 import { mesaService, type Mesa } from '../services/mesaService'
 import { reservaService, type Reserva } from '../services/reservaService'
 import { useAuth, type Profile } from '../contexts/AuthContext'
@@ -107,13 +108,21 @@ export function MesaGrid() {
         loadMesas()
 
         const subscription = mesaService.subscribeToMesas(() => {
+            console.log('🔄 Mesas updated, reloading...')
             loadMesas()
         })
 
+        // También suscribir a cambios en pedidos y reservas para refrescar estados
+        const pedidosChannel = supabase.channel('mesagrid-sync')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'pedidos' }, () => loadMesas())
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'reservas' }, () => loadMesas())
+            .subscribe()
+
         return () => {
             subscription.unsubscribe()
+            supabase.removeChannel(pedidosChannel)
         }
-    }, [])
+    }, [empresa?.id])
 
     async function loadMesas() {
         try {
@@ -207,29 +216,7 @@ export function MesaGrid() {
         return true
     })
 
-    if (loading) {
-        return (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-                    <div key={i} className="card h-48 animate-pulse bg-slate-100" />
-                ))}
-            </div>
-        )
-    }
-
-    // MOBILE VIEW FOR WAITERS
-    if ((profile?.rol as string) === 'mesero') {
-        return (
-            <WaiterTableListMobile
-                mesas={mesas}
-                reservas={reservas}
-                onMesaClick={handleMesaClick}
-                filter={filter}
-                setFilter={setFilter}
-                loading={loading}
-            />
-        )
-    }
+    const isMesero = profile?.rol === 'mesero'
 
     return (
         <div className="space-y-8">
@@ -238,7 +225,7 @@ export function MesaGrid() {
                     <h1 className="text-2xl font-bold text-slate-900">Gestión de Mesas</h1>
                     <p className="text-slate-500">Vista en tiempo real del salón</p>
                 </div>
-                {profile?.rol !== 'mesero' && (
+                {!isMesero && (
                     <button
                         onClick={() => setIsReservaModalOpen(true)}
                         className="btn btn-primary flex items-center gap-2"
@@ -265,25 +252,42 @@ export function MesaGrid() {
                 ))}
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-                {filteredMesas.map((mesa) => (
-                    <MesaCard
-                        key={mesa.id}
-                        mesa={mesa}
-                        proximaReserva={getMesaReserva(mesa.id)}
-                        onClick={handleMesaClick}
-                        onReset={handleResetMesa}
-                        profile={profile}
-                    />
-                ))}
-                {mesas.length === 0 && !loading && (
-                    <div className="col-span-full py-12 text-center card bg-slate-50 border-dashed">
-                        <Users className="w-12 h-12 text-slate-300 mx-auto mb-4" />
-                        <h3 className="text-lg font-medium text-slate-900">No hay mesas configuradas</h3>
-                        <p className="text-slate-500 mt-1">Empieza por añadir algunas mesas a tu salón.</p>
-                    </div>
-                )}
-            </div>
+            {loading ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+                        <div key={i} className="card h-48 animate-pulse bg-slate-100" />
+                    ))}
+                </div>
+            ) : isMesero ? (
+                <WaiterTableListMobile
+                    mesas={mesas}
+                    reservas={reservas}
+                    onMesaClick={handleMesaClick}
+                    filter={filter}
+                    setFilter={setFilter}
+                    loading={loading}
+                />
+            ) : (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
+                    {filteredMesas.map((mesa) => (
+                        <MesaCard
+                            key={mesa.id}
+                            mesa={mesa}
+                            proximaReserva={getMesaReserva(mesa.id)}
+                            onClick={handleMesaClick}
+                            onReset={handleResetMesa}
+                            profile={profile}
+                        />
+                    ))}
+                    {mesas.length === 0 && (
+                        <div className="col-span-full py-12 text-center card bg-slate-50 border-dashed">
+                            <Users className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+                            <h3 className="text-lg font-medium text-slate-900">No hay mesas configuradas</h3>
+                            <p className="text-slate-500 mt-1">Empieza por añadir algunas mesas a tu salón.</p>
+                        </div>
+                    )}
+                </div>
+            )}
 
             {/* Modal Nueva Reserva */}
             {isReservaModalOpen && (
