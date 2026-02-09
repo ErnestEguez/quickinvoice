@@ -61,7 +61,7 @@ function MesaCard({ mesa, proximaReserva, onClick, onReset, profile }: MesaCardP
                             <div className="flex flex-col items-end gap-1">
                                 <div className="flex items-center gap-1 text-[10px] font-black bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full">
                                     <Clock className="w-2.5 h-2.5" />
-                                    {new Date(proximaReserva.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                    {proximaReserva?.fecha_hora ? new Date(proximaReserva.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
                                 </div>
                                 <div className="text-[10px] font-bold text-primary-600 truncate max-w-[100px]">
                                     {proximaReserva.cliente_nombre} ({proximaReserva.personas})
@@ -122,8 +122,8 @@ export function MesaGrid() {
 
             if (empresa?.id) {
                 // Obtenemos todas las pendientes para hoy/futuro
-                const resData = await reservaService.getReservas(empresa.id)
-                setReservas(resData.filter(r => r.estado === 'pendiente'))
+                const resData = await reservaService.getReservas(empresa.id) || []
+                setReservas(resData.filter((r: any) => r && r.estado === 'pendiente'))
             }
         } catch (error) {
             console.error('Error loading mesas:', error)
@@ -180,7 +180,7 @@ export function MesaGrid() {
         const ahora = new Date()
         const limite = new Date(ahora.getTime() + 90 * 60000) // 90 minutos
 
-        return reservas.find(r =>
+        return (reservas || []).find(r =>
             r.mesa_id === mesaId &&
             new Date(r.fecha_hora) >= ahora &&
             new Date(r.fecha_hora) <= limite
