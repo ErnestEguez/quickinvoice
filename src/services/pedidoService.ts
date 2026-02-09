@@ -26,8 +26,7 @@ export const pedidoService = {
             producto_id: item.id,
             cantidad: Number(item.cantidad || 0),
             precio_unitario: Number(item.precio_venta || 0),
-            subtotal: Number(item.precio_venta || 0) * Number(item.cantidad || 0),
-            notas: item.notas || ''
+            subtotal: Number(item.precio_venta || 0) * Number(item.cantidad || 0)
         }))
 
         // Llamar al RPC (Procedimiento Almacenado) que maneja la transacción atómica

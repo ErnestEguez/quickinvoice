@@ -32,16 +32,14 @@ BEGIN
             producto_id,
             cantidad,
             precio_unitario,
-            subtotal,
-            notas
+            subtotal
         )
         VALUES (
             v_pedido_id,
             (v_detalle->>'producto_id')::UUID,
             (v_detalle->>'cantidad')::INTEGER,
             (v_detalle->>'precio_unitario')::NUMERIC,
-            (v_detalle->>'subtotal')::NUMERIC,
-            v_detalle->>'notas'
+            (v_detalle->>'subtotal')::NUMERIC
         );
     END LOOP;
 

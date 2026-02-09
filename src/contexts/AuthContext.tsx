@@ -124,7 +124,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 console.error('❌ Profile Fetch Error:', profileError)
                 if (profileError.code === 'PGRST116' || profileError.status === 406) {
                     console.warn('⚠️ User has no profile in DB yet')
-                    setProfile(null)
                     setEmpresa(null)
                 }
                 setLoading(false)
@@ -152,13 +151,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setEmpresa(null)
             }
         } catch (error: any) {
-            console.error('🔥 CRITICAL Auth context fetch error:', error.message);
-            // Si falla el perfil, nos aseguramos de que loading se apague
-            // pero mantenemos el user para que ProtectedRoute pueda decidir
-            if (isMounted.current) {
-                setProfile(null)
-                setEmpresa(null)
-            }
+            console.error('🔥 Auth context profile fetch error:', error.message);
+            // Ya no reseteamos el perfil a null en errores genéricos para evitar "Usuario" fallback
+            // El loading sí debe terminar
         } finally {
             if (isMounted.current) setLoading(false)
         }

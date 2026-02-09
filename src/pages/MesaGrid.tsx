@@ -235,22 +235,24 @@ export function MesaGrid() {
                 )}
             </div>
 
-            <div className="flex gap-4 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-hide">
-                {['Todas', 'Libres', 'Ocupadas', 'Reservadas'].map((f: any) => (
-                    <button
-                        key={f}
-                        onClick={() => setFilter(f)}
-                        className={cn(
-                            "px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all",
-                            f === filter
-                                ? "bg-slate-900 text-white"
-                                : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-                        )}
-                    >
-                        {f}
-                    </button>
-                ))}
-            </div>
+            {!isMesero && (
+                <div className="flex gap-4 overflow-x-auto pb-2 -mx-2 px-2 scrollbar-hide">
+                    {['Todas', 'Libres', 'Ocupadas', 'Reservadas'].map((f: any) => (
+                        <button
+                            key={f}
+                            onClick={() => setFilter(f)}
+                            className={cn(
+                                "px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition-all",
+                                f === filter
+                                    ? "bg-slate-900 text-white"
+                                    : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
+                            )}
+                        >
+                            {f}
+                        </button>
+                    ))}
+                </div>
+            )}
 
             {loading ? (
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
