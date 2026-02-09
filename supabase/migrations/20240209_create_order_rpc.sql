@@ -10,6 +10,8 @@ CREATE OR REPLACE FUNCTION crear_pedido_completo(
 )
 RETURNS JSONB
 LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
     v_pedido_id UUID;
