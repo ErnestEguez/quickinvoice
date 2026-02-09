@@ -252,11 +252,11 @@ export function OrderTake() {
                     {existingPedido && (
                         <div className="bg-amber-50 p-4 border-b border-amber-100">
                             <p className="text-xs font-bold text-amber-700 mb-2 uppercase tracking-widest">Ya ordenado:</p>
-                            <div className="space-y-1">
-                                {existingPedido.pedido_detalles?.map((det: any) => (
-                                    <div key={det.id} className="flex justify-between text-xs text-amber-900">
-                                        <span>{det.productos?.nombre} x{det.cantidad}</span>
-                                        <span>{formatCurrency(det.subtotal)}</span>
+                            <div className="space-y-3">
+                                {(existingPedido.pedido_detalles || []).map((detalle: any) => (
+                                    <div key={detalle.id} className="flex justify-between items-center text-sm text-amber-900">
+                                        <span>{detalle.productos?.nombre} x{detalle.cantidad}</span>
+                                        <span>{formatCurrency(detalle.subtotal)}</span>
                                     </div>
                                 ))}
                                 <div className="pt-1 mt-1 border-t border-amber-200 flex justify-between font-bold text-amber-900">

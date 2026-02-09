@@ -383,7 +383,7 @@ export function OrdersPage() {
                                 <div className="bg-slate-50 border-t border-slate-100 p-4 sm:p-6">
                                     <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4">Detalle del Pedido</h4>
                                     <div className="space-y-3">
-                                        {pedido.pedido_detalles?.map((detalle: any) => (
+                                        {(pedido.pedido_detalles || []).map((detalle: any) => (
                                             <div key={detalle.id} className="flex justify-between items-center text-sm">
                                                 <div className="flex items-center gap-3">
                                                     <span className="font-bold text-slate-900 w-6">{detalle.cantidad}x</span>

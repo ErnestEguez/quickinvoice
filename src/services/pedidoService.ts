@@ -21,55 +21,30 @@ export interface PedidoDetalle {
 
 export const pedidoService = {
     async crearPedido(mesaId: string, meseroId: string, empresaId: string, items: any[], total: number) {
-        // En una transacción real usaríamos un RPC de Supabase, 
-        // pero para este MVP lo hacemos en dos pasos.
+        // Preparar los detalles para el RPC
+        const detalles = items.map(item => ({
+            producto_id: item.id,
+            cantidad: Number(item.cantidad || 0),
+            precio_unitario: Number(item.precio_venta || 0),
+            subtotal: Number(item.precio_venta || 0) * Number(item.cantidad || 0),
+            notas: item.notas || ''
+        }))
 
-        // 1. Crear la cabecera del pedido
-        const { data: pedido, error: pedidoError } = await supabase
-            .from('pedidos')
-            .insert({
-                mesa_id: mesaId,
-                mesero_id: meseroId,
-                empresa_id: empresaId,
-                total: total,
-                estado: 'pendiente'
-            })
-            .select()
-            .single()
-
-        if (pedidoError) throw pedidoError
-
-        // 2. Crear los detalles
-        const detalles = items.map(item => {
-            const precio_unitario = Number(item.precio_venta || 0)
-            const cantidad = Number(item.cantidad || 0)
-            const subtotal = precio_unitario * cantidad
-
-            return {
-                pedido_id: pedido.id,
-                producto_id: item.id,
-                cantidad: cantidad,
-                precio_unitario: precio_unitario,
-                subtotal: subtotal
-            }
+        // Llamar al RPC (Procedimiento Almacenado) que maneja la transacción atómica
+        const { data, error } = await supabase.rpc('crear_pedido_completo', {
+            p_mesa_id: mesaId,
+            p_mesero_id: meseroId,
+            p_empresa_id: empresaId,
+            p_total: total,
+            p_detalles: detalles
         })
 
-        console.log('Inserting details with subtotal (minified):', detalles)
-        const { error: detallesError } = await supabase
-            .from('pedido_detalles')
-            .insert(detalles)
+        if (error) {
+            console.error('Error en RPC crear_pedido_completo:', error)
+            throw error
+        }
 
-        if (detallesError) throw detallesError
-
-        // 3. Actualizar estado de la mesa a 'ocupada'
-        const { error: mesaError } = await supabase
-            .from('mesas')
-            .update({ estado: 'ocupada' })
-            .eq('id', mesaId)
-
-        if (mesaError) throw mesaError
-
-        return pedido
+        return data
     },
 
     async getPedidosRecientes(limit = 5) {
