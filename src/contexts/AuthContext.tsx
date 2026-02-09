@@ -36,20 +36,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         let isMounted = true;
 
         const initializeAuth = async () => {
+            console.log('🏁 Auth Initialization Started');
             try {
-                const { data: { session } } = await supabase.auth.getSession();
+                // Timeout para gertSession por si acaso cuelga
+                const sessionPromise = supabase.auth.getSession();
+                const timeoutPromise = new Promise((_, reject) =>
+                    setTimeout(() => reject(new Error('Session fetch timeout')), 5000)
+                );
+
+                const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
+
                 if (!isMounted) return;
 
                 if (session?.user) {
-                    console.log('📦 Initial session found:', session.user.email);
-                    setUser(session?.user ?? null);
+                    console.log('📦 Session found for:', session.user.email, 'ID:', session.user.id);
+                    setUser(session.user);
                     await fetchProfile(session.user.id);
                 } else {
-                    console.log('Empty initial session');
+                    console.log('⚪ No active session found');
                     setLoading(false);
                 }
             } catch (err) {
-                console.error('Initialization error:', err);
+                console.error('❌ Auth Initialization Error:', err);
                 if (isMounted) setLoading(false);
             }
         };
@@ -58,16 +66,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
             if (!isMounted) return;
-            console.log('🔔 Auth Event:', _event, session?.user?.email);
+            console.log('🔔 AUTH STATE CHANGE EVENT:', _event);
+            console.log('👤 Session User:', session?.user?.email || 'NONE');
 
             if (_event === 'SIGNED_IN') {
                 setUser(session?.user ?? null);
                 if (session?.user) await fetchProfile(session.user.id);
             } else if (_event === 'SIGNED_OUT') {
+                console.warn('⚠️ SIGNED_OUT event received - Clearing state');
                 setUser(null);
                 setProfile(null);
                 setEmpresa(null);
                 setLoading(false);
+            } else if (_event === 'TOKEN_REFRESHED') {
+                console.log('🔄 Token Refreshed');
+            } else if (_event === 'USER_UPDATED') {
+                console.log('👤 User Updated');
+                if (session?.user) await fetchProfile(session.user.id);
             }
         });
 

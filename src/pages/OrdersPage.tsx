@@ -216,6 +216,15 @@ export function OrdersPage() {
         }
     }
 
+    const formatTime = (dateStr: string) => {
+        try {
+            if (!dateStr) return '...'
+            return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        } catch (e) {
+            return '...'
+        }
+    }
+
     if (!empresa) {
         return (
             <div className="card p-12 text-center">
@@ -303,7 +312,7 @@ export function OrdersPage() {
                                         <div className="flex items-center gap-4 mt-1">
                                             <span className="text-sm text-slate-500 flex items-center gap-1">
                                                 <Clock className="w-3.5 h-3.5" />
-                                                {new Date(pedido.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                {formatTime(pedido.created_at)}
                                             </span>
                                             <span className="text-sm font-bold text-primary-600">
                                                 {formatCurrency(pedido.total)}

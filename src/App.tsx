@@ -1,5 +1,6 @@
 import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
@@ -57,138 +58,140 @@ function HomeRedirect() {
 
 function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <Routes>
-          <Route path="/login" element={<LoginPage />} />
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AuthProvider>
+          <Routes>
+            <Route path="/login" element={<LoginPage />} />
 
-          <Route path="/" element={
-            <ProtectedRoute>
-              <RoleProtectedRoute allowedRoles={['oficina', 'admin_plataforma']}>
+            <Route path="/" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['oficina', 'admin_plataforma']}>
+                  <Layout>
+                    <HomeRedirect />
+                  </Layout>
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/mesas" element={
+              <ProtectedRoute>
                 <Layout>
-                  <HomeRedirect />
+                  <MesaGrid />
                 </Layout>
-              </RoleProtectedRoute>
-            </ProtectedRoute>
-          } />
+              </ProtectedRoute>
+            } />
 
-          <Route path="/mesas" element={
-            <ProtectedRoute>
-              <Layout>
-                <MesaGrid />
-              </Layout>
-            </ProtectedRoute>
-          } />
-
-          <Route path="/mesas/:mesaId/pedido" element={
-            <ProtectedRoute>
-              <Layout>
-                <OrderTake />
-              </Layout>
-            </ProtectedRoute>
-          } />
-
-          <Route path="/pedidos" element={
-            <ProtectedRoute>
-              <Layout>
-                <OrdersPage />
-              </Layout>
-            </ProtectedRoute>
-          } />
-
-          <Route path="/productos" element={
-            <ProtectedRoute>
-              <RoleProtectedRoute allowedRoles={['oficina']}>
+            <Route path="/mesas/:mesaId/pedido" element={
+              <ProtectedRoute>
                 <Layout>
-                  <ProductsPage />
+                  <OrderTake />
                 </Layout>
-              </RoleProtectedRoute>
-            </ProtectedRoute>
-          } />
+              </ProtectedRoute>
+            } />
 
-          <Route path="/clientes" element={
-            <ProtectedRoute>
-              <RoleProtectedRoute allowedRoles={['oficina']}>
+            <Route path="/pedidos" element={
+              <ProtectedRoute>
                 <Layout>
-                  <ClientsPage />
+                  <OrdersPage />
                 </Layout>
-              </RoleProtectedRoute>
-            </ProtectedRoute>
-          } />
+              </ProtectedRoute>
+            } />
 
-          <Route path="/facturacion" element={
-            <ProtectedRoute>
-              <RoleProtectedRoute allowedRoles={['oficina']}>
-                <Layout>
-                  <InvoicingPage />
-                </Layout>
-              </RoleProtectedRoute>
-            </ProtectedRoute>
-          } />
+            <Route path="/productos" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['oficina']}>
+                  <Layout>
+                    <ProductsPage />
+                  </Layout>
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
 
-          <Route path="/configuracion" element={
-            <ProtectedRoute>
-              <RoleProtectedRoute allowedRoles={['oficina', 'admin_plataforma']}>
-                <Layout>
-                  <ConfigurationPage />
-                </Layout>
-              </RoleProtectedRoute>
-            </ProtectedRoute>
-          } />
+            <Route path="/clientes" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['oficina']}>
+                  <Layout>
+                    <ClientsPage />
+                  </Layout>
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
 
-          <Route path="/proveedores" element={
-            <ProtectedRoute>
-              <RoleProtectedRoute allowedRoles={['oficina']}>
-                <Layout>
-                  <ProveedoresPage />
-                </Layout>
-              </RoleProtectedRoute>
-            </ProtectedRoute>
-          } />
+            <Route path="/facturacion" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['oficina']}>
+                  <Layout>
+                    <InvoicingPage />
+                  </Layout>
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
 
-          <Route path="/inventario" element={
-            <ProtectedRoute>
-              <RoleProtectedRoute allowedRoles={['oficina']}>
-                <Layout>
-                  <InventarioPage />
-                </Layout>
-              </RoleProtectedRoute>
-            </ProtectedRoute>
-          } />
+            <Route path="/configuracion" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['oficina', 'admin_plataforma']}>
+                  <Layout>
+                    <ConfigurationPage />
+                  </Layout>
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
 
-          <Route path="/kardex" element={
-            <ProtectedRoute>
-              <RoleProtectedRoute allowedRoles={['oficina']}>
-                <Layout>
-                  <KardexPage />
-                </Layout>
-              </RoleProtectedRoute>
-            </ProtectedRoute>
-          } />
+            <Route path="/proveedores" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['oficina']}>
+                  <Layout>
+                    <ProveedoresPage />
+                  </Layout>
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
 
-          <Route path="/comprobante/:id/print" element={
-            <ProtectedRoute>
-              <InvoicePrint />
-            </ProtectedRoute>
-          } />
+            <Route path="/inventario" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['oficina']}>
+                  <Layout>
+                    <InventarioPage />
+                  </Layout>
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
 
-          <Route path="/comprobante/:id/ticket" element={
-            <ProtectedRoute>
-              <TicketPrint />
-            </ProtectedRoute>
-          } />
+            <Route path="/kardex" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['oficina']}>
+                  <Layout>
+                    <KardexPage />
+                  </Layout>
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
 
-          <Route path="/pedido/:id/kitchen" element={
-            <ProtectedRoute>
-              <KitchenOrderPrint />
-            </ProtectedRoute>
-          } />
+            <Route path="/comprobante/:id/print" element={
+              <ProtectedRoute>
+                <InvoicePrint />
+              </ProtectedRoute>
+            } />
 
-          {/* Catch all */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </AuthProvider>
-    </BrowserRouter>
+            <Route path="/comprobante/:id/ticket" element={
+              <ProtectedRoute>
+                <TicketPrint />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/pedido/:id/kitchen" element={
+              <ProtectedRoute>
+                <KitchenOrderPrint />
+              </ProtectedRoute>
+            } />
+
+            {/* Catch all */}
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </AuthProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   )
 }
 
