@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { Users, Clock } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import type { Mesa } from '../../services/mesaService'

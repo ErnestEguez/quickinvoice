@@ -5,7 +5,6 @@ import {
     Minus,
     Trash2,
     ChevronLeft,
-    ShoppingCart,
     Utensils,
     X,
     CheckCircle2

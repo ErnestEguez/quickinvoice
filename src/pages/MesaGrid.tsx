@@ -218,7 +218,7 @@ export function MesaGrid() {
     }
 
     // MOBILE VIEW FOR WAITERS
-    if (profile?.rol === 'mesero') {
+    if ((profile?.rol as string) === 'mesero') {
         return (
             <WaiterTableListMobile
                 mesas={mesas}
