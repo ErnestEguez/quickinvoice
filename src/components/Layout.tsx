@@ -60,9 +60,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
         { to: '/configuracion', icon: Settings, label: 'Configuración', roles: ['oficina'] },
     ]
 
-    const filteredNav = navigation.filter(item =>
-        !profile?.rol || item.roles.includes(profile.rol)
-    )
+    const filteredNav = navigation.filter(item => {
+        if (!profile?.rol) return false
+        return item.roles.includes(profile.rol)
+    })
 
     return (
         <div className="min-h-screen bg-slate-50 flex">

@@ -220,7 +220,18 @@ export function OrdersPage() {
         return (
             <div className="card p-12 text-center">
                 <h2 className="text-xl font-bold text-slate-800">No se encontró la configuración de la empresa</h2>
-                <p className="text-slate-500 mt-2">Por favor, asegúrate de haber ejecutado el script SQL de reparación.</p>
+                <p className="text-slate-500 mt-2">Esto puede deberse a un error de conexión.</p>
+                <div className="mt-6 flex justify-center gap-4">
+                    <button
+                        onClick={() => window.location.reload()}
+                        className="btn btn-primary"
+                    >
+                        Recargar Página
+                    </button>
+                    <Link to="/login" className="btn btn-outline">
+                        Ir al Login
+                    </Link>
+                </div>
             </div>
         )
     }

@@ -86,30 +86,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }, [])
 
     async function fetchProfile(userId: string) {
+        // Avoid fetching if we already have the profile for this user
+        if (profile?.id === userId && empresa) {
+            console.log('⚡ Profile already loaded for', userId)
+            setLoading(false)
+            return
+        }
+
         const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('Profile fetch timeout')), 5000)
+            setTimeout(() => reject(new Error('Profile fetch timeout')), 8000)
         );
 
         try {
             console.log('🔄 Fetching profile for:', userId);
 
-            // Usar una carrera entre el fetch y el timeout
             const { data: profileData, error: profileError } = await Promise.race([
                 supabase.from('profiles').select('*').eq('id', userId).single(),
                 timeoutPromise as any
-            ]);
+            ]) as any;
 
             if (profileError) {
-                if (profileError.code === 'PGRST116' || (profileError as any).status === 406) {
-                    console.log('User has no profile in DB yet');
+                console.error('❌ Profile Fetch Error:', profileError)
+                // Only clear if strictly necessary (e.g. 406 means no rows)
+                if (profileError.code === 'PGRST116' || profileError.status === 406) {
+                    console.warn('⚠️ User has no profile in DB yet (PGRST116/406)')
                     setProfile(null)
-                    setLoading(false)
-                    return
+                    setEmpresa(null)
                 }
-                throw profileError
+                // If it's a network error or timeout, DO NOT clear state if we have it? 
+                // Actually if we are here, we probably don't have it or we are refreshing.
+                // Let's keep existing state if possible? No, unsafe.
+                setLoading(false)
+                return
             }
 
-            console.log('✅ Profile loaded:', profileData?.rol);
+            console.log('✅ Profile loaded:', profileData.rol);
             setProfile(profileData)
 
             if (profileData.empresa_id) {
@@ -121,16 +132,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
                 if (!empresaError) {
                     setEmpresa(empresaData)
+                } else {
+                    console.error('❌ Empresa Fetch Error:', empresaError)
                 }
             } else {
                 setEmpresa(null)
             }
         } catch (error: any) {
-            console.error('Auth context fetch error:', error.message);
-            // Si hay error (como recursión de RLS), liberamos el loading para que el usuario
-            // pueda al menos ver el botón de cerrar sesión o intentar resetear.
-            setProfile(null)
-            setEmpresa(null)
+            console.error('🔥 CRITICAL Auth context fetch error:', error.message);
+            // Do NOT clear state immediately on generic errors to prevent UI flashing "No Config"
+            // unless it's the first load
+            if (!profile) {
+                setProfile(null)
+                setEmpresa(null)
+            }
         } finally {
             setLoading(false)
         }
