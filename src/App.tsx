@@ -24,36 +24,38 @@ import { ProtectedRoute as RoleProtectedRoute } from './components/ProtectedRout
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
-      </div>
-    )
-  }
-
-  if (!user) {
-    return <Navigate to="/login" replace />
-  }
-
-  return <>{children}</>
+  return (
+    <div className="min-h-screen flex flex-col">
+      {loading ? (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        </div>
+      ) : user ? (
+        children
+      ) : (
+        <Navigate to="/login" replace />
+      )}
+    </div>
+  )
 }
 
 // Componente para manejar la redirección del Dashboard inicial según rol
 function HomeRedirect() {
   const { profile, loading } = useAuth()
 
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+  return (
+    <div className="w-full">
+      {loading ? (
+        <div className="flex items-center justify-center p-12">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        </div>
+      ) : profile?.rol === 'admin_plataforma' ? (
+        <Navigate to="/configuracion" replace />
+      ) : (
+        <Dashboard />
+      )}
     </div>
   )
-
-  if (profile?.rol === 'admin_plataforma') {
-    return <Navigate to="/configuracion" replace />
-  }
-
-  return <Dashboard />
 }
 
 function App() {

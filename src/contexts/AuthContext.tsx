@@ -31,10 +31,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [profile, setProfile] = useState<Profile | null>(null)
     const [empresa, setEmpresa] = useState<Empresa | null>(null)
     const [loading, setLoading] = useState(true)
+    const isMounted = React.useRef(true)
 
     useEffect(() => {
-        let isMounted = true;
-
+        isMounted.current = true;
         const initializeAuth = async () => {
             console.log('🏁 Auth Initialization Started');
             try {
@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
                 const { data: { session } } = await Promise.race([sessionPromise, timeoutPromise]) as any;
 
-                if (!isMounted) return;
+                if (!isMounted.current) return;
 
                 if (session?.user) {
                     console.log('📦 Session found for:', session.user.email, 'ID:', session.user.id);
@@ -58,14 +58,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 }
             } catch (err) {
                 console.error('❌ Auth Initialization Error:', err);
-                if (isMounted) setLoading(false);
+                if (isMounted.current) setLoading(false);
             }
         };
 
         initializeAuth();
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            if (!isMounted) return;
+            if (!isMounted.current) return;
             console.log('🔔 AUTH STATE CHANGE EVENT:', _event);
             console.log('👤 Session User:', session?.user?.email || 'NONE');
 
@@ -87,14 +87,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         });
 
         const timer = setTimeout(() => {
-            if (isMounted && loading) {
+            if (isMounted.current && loading) {
                 console.warn('Auth timeout reached');
                 setLoading(false);
             }
         }, 10000);
 
         return () => {
-            isMounted = false;
+            isMounted.current = false;
             subscription.unsubscribe();
             clearTimeout(timer);
         };
@@ -153,14 +153,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             }
         } catch (error: any) {
             console.error('🔥 CRITICAL Auth context fetch error:', error.message);
-            // Do NOT clear state immediately on generic errors to prevent UI flashing "No Config"
-            // unless it's the first load
-            if (!profile) {
+            // Si falla el perfil, nos aseguramos de que loading se apague
+            // pero mantenemos el user para que ProtectedRoute pueda decidir
+            if (isMounted.current) {
                 setProfile(null)
                 setEmpresa(null)
             }
         } finally {
-            setLoading(false)
+            if (isMounted.current) setLoading(false)
         }
     }
 

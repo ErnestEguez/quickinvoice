@@ -31,18 +31,24 @@ export function LoginPage() {
             return
         }
 
-        const { data, error } = await supabase.auth.signInWithPassword({
-            email,
-            password,
-        })
+        try {
+            const { data, error } = await supabase.auth.signInWithPassword({
+                email,
+                password,
+            })
 
-        if (error) {
-            console.error('FULL LOGIN ERROR OBJECT:', error)
-            setError(error.message)
+            if (error) {
+                console.error('FULL LOGIN ERROR OBJECT:', error)
+                setError(error.message)
+            } else if (data.user) {
+                console.log('Login successful:', data)
+                navigate('/', { replace: true })
+            }
+        } catch (err: any) {
+            console.error('🔥 CRITICAL Login error:', err.message);
+            setError('Ocurrió un error inesperado. Por favor, inténtalo de nuevo.');
+        } finally {
             setLoading(false)
-        } else if (data.user) {
-            console.log('Login successful:', data)
-            navigate('/', { replace: true })
         }
     }
 
@@ -122,8 +128,14 @@ export function LoginPage() {
                     </button>
                 </form>
 
-                <div className="mt-8 pt-6 border-t border-slate-100 text-center">
-                    <p className="text-xs text-slate-400">
+                <div className="mt-8 pt-6 border-t border-slate-100 text-center space-y-4">
+                    <button
+                        onClick={signOut}
+                        className="text-xs text-slate-400 hover:text-red-500 underline font-bold transition-colors"
+                    >
+                        ¿Problemas para entrar? Limpiar sesión y reintentar
+                    </button>
+                    <p className="text-[10px] text-slate-300">
                         © 2026 RestoFlow. Sistema de Gestión Gastronómica.
                     </p>
                 </div>
