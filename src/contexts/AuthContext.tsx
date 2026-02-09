@@ -107,33 +107,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
             if (profileError) {
                 console.error('❌ Profile Fetch Error:', profileError)
-                // Only clear if strictly necessary (e.g. 406 means no rows)
                 if (profileError.code === 'PGRST116' || profileError.status === 406) {
-                    console.warn('⚠️ User has no profile in DB yet (PGRST116/406)')
+                    console.warn('⚠️ User has no profile in DB yet')
                     setProfile(null)
                     setEmpresa(null)
                 }
-                // If it's a network error or timeout, DO NOT clear state if we have it? 
-                // Actually if we are here, we probably don't have it or we are refreshing.
-                // Let's keep existing state if possible? No, unsafe.
                 setLoading(false)
                 return
             }
 
-            console.log('✅ Profile loaded:', profileData.rol);
-            setProfile(profileData)
+            const data = profileData || {}
+            console.log('✅ Profile loaded:', data.rol);
+            setProfile(data)
 
-            if (profileData.empresa_id) {
+            if (data.empresa_id) {
                 const { data: empresaData, error: empresaError } = await supabase
                     .from('empresas')
                     .select('*')
-                    .eq('id', profileData.empresa_id)
+                    .eq('id', data.empresa_id)
                     .single()
 
-                if (!empresaError) {
+                if (!empresaError && empresaData) {
                     setEmpresa(empresaData)
                 } else {
                     console.error('❌ Empresa Fetch Error:', empresaError)
+                    setEmpresa(null)
                 }
             } else {
                 setEmpresa(null)
