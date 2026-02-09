@@ -1,19 +1,12 @@
 -- =====================================================
 -- RECREACIÓN COMPLETA DE BASE DE DATOS (SAAS RESTAURANTE)
--- INLUYE: TABLAS, RELACIONES, POLÍTICAS RLS (v7) Y DATOS INICIALES
+-- VERSIÓN ACTUALIZADA: INCLUYE POLÍTICAS RLS V7 Y LIMPIEZA PREVIA
 -- =====================================================
-
--- 1. LIMPIEZA TOTAL (¡CUIDADO!)
--- Descomentar estas líneas si se desea borrar todo antes de empezar
--- DROP SCHEMA public CASCADE;
--- CREATE SCHEMA public;
--- GRANT ALL ON SCHEMA public TO postgres;
--- GRANT ALL ON SCHEMA public TO public;
-
--- Habilitar extensión UUID
+-- Lunes 9 de Febrero 2026 10:32        Solicitado Antes de Cambio de FrontEnd para meseros
+-- 1. EXTENSIONES
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 2. CREACIÓN DE TABLAS
+-- 2. CREACIÓN DE TABLAS (SI NO EXISTEN)
 
 -- Empresas (SaaS Tenants)
 CREATE TABLE IF NOT EXISTS public.empresas (
@@ -45,7 +38,7 @@ CREATE TABLE IF NOT EXISTS public.categorias (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     empresa_id UUID REFERENCES public.empresas(id) ON DELETE CASCADE,
     nombre TEXT NOT NULL,
-    tipo TEXT DEFAULT 'restaurante', -- restaurante, inventario, etc
+    tipo TEXT DEFAULT 'restaurante', 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
@@ -260,56 +253,103 @@ $$;
 
 -- 4. POLÍTICAS RLS (VERSIÓN DEFINITIVA V7)
 
--- Activar RLS en tablas críticas
-ALTER TABLE public.empresas ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.productos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.categorias ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.mesas ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.pedidos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.pedido_detalles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.clientes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.comprobantes ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.comprobante_detalles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.comprobante_pagos ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.reservas ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.proveedores ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.ingresos_stock ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.detalle_ingresos_stock ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.kardex ENABLE ROW LEVEL SECURITY;
+-- Activar RLS en todas las tablas
+DO $$ 
+DECLARE 
+    tbl TEXT;
+BEGIN
+    FOR tbl IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public') 
+    LOOP
+        EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', tbl);
+    END LOOP;
+END $$;
 
--- POLÍTICAS PARA PROFILES (Usa funciones para evitar recursión)
-CREATE POLICY "profiles_select" ON public.profiles FOR SELECT TO authenticated USING (id = auth.uid() OR public.is_platform_admin() OR (empresa_id = public.get_my_empresa_id() AND public.is_oficina()));
-CREATE POLICY "profiles_insert" ON public.profiles FOR INSERT TO authenticated WITH CHECK (id = auth.uid() OR public.is_platform_admin() OR (empresa_id = public.get_my_empresa_id() AND public.is_oficina()));
-CREATE POLICY "profiles_update" ON public.profiles FOR UPDATE TO authenticated USING (id = auth.uid() OR public.is_platform_admin() OR (empresa_id = public.get_my_empresa_id() AND public.is_oficina()));
-CREATE POLICY "profiles_delete" ON public.profiles FOR DELETE TO authenticated USING (public.is_platform_admin() OR (empresa_id = public.get_my_empresa_id() AND public.is_oficina()));
+-- LIMPIEZA PREVIA DE POLÍTICAS (Para evitar duplicados)
+DO $$ 
+DECLARE 
+    pol RECORD;
+BEGIN
+    FOR pol IN (SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public') 
+    LOOP
+        EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I;', pol.policyname, pol.tablename);
+    END LOOP;
+END $$;
 
--- POLÍTICAS PARA EMPRESAS
-CREATE POLICY "empresas_select" ON public.empresas FOR SELECT TO authenticated USING (public.is_platform_admin() OR id = public.get_my_empresa_id());
-CREATE POLICY "empresas_update" ON public.empresas FOR UPDATE TO authenticated USING (public.is_platform_admin() OR (id = public.get_my_empresa_id() AND public.is_oficina()));
+-- 4.1 POLÍTICAS PARA PROFILES
+-- SELECT: Ver propio perfil OR admin OR oficina viendo a su staff
+CREATE POLICY "profiles_select" ON public.profiles FOR SELECT TO authenticated
+USING (
+  id = auth.uid() 
+  OR public.is_platform_admin() 
+  OR (empresa_id = public.get_my_empresa_id() AND public.is_oficina())
+);
 
--- POLÍTICAS GENERALES (Filtrar por empresa_id)
--- Para simplificar, aplicamos una política genérica a las demás tablas
+-- INSERT: Registro propio OR admin creando usuarios OR oficina creando meseros
+CREATE POLICY "profiles_insert" ON public.profiles FOR INSERT TO authenticated
+WITH CHECK (
+  id = auth.uid() 
+  OR public.is_platform_admin() 
+  OR (empresa_id = public.get_my_empresa_id() AND public.is_oficina())
+);
+
+-- UPDATE: Propio perfil OR admin OR oficina gestionando staff
+CREATE POLICY "profiles_update" ON public.profiles FOR UPDATE TO authenticated
+USING (
+  id = auth.uid() 
+  OR public.is_platform_admin() 
+  OR (empresa_id = public.get_my_empresa_id() AND public.is_oficina())
+);
+
+-- DELETE: Solo admin o oficina
+CREATE POLICY "profiles_delete" ON public.profiles FOR DELETE TO authenticated
+USING (
+  public.is_platform_admin() 
+  OR (empresa_id = public.get_my_empresa_id() AND public.is_oficina())
+);
+
+-- 4.2 POLÍTICAS PARA EMPRESAS
+-- SELECT: Admin ve todas, Usuarios ven su propia empresa
+CREATE POLICY "empresas_select" ON public.empresas FOR SELECT TO authenticated
+USING (
+  public.is_platform_admin() 
+  OR id = public.get_my_empresa_id()
+);
+
+-- INSERT: Solo admin
+CREATE POLICY "empresas_insert" ON public.empresas FOR INSERT TO authenticated
+WITH CHECK (public.is_platform_admin());
+
+-- UPDATE: Admin o Oficina (para configurar su propia empresa)
+CREATE POLICY "empresas_update" ON public.empresas FOR UPDATE TO authenticated
+USING (
+  public.is_platform_admin() 
+  OR (id = public.get_my_empresa_id() AND public.is_oficina())
+);
+
+-- DELETE: Solo admin
+CREATE POLICY "empresas_delete" ON public.empresas FOR DELETE TO authenticated
+USING (public.is_platform_admin());
+
+-- 4.3 POLÍTICAS GENÉRICAS PARA EL RESTO DE TABLAS
+-- Se aplican a: productos, pedidos, mesas, clientes, etc.
+-- Regla: Admin ve todo, Usuario ve solo data de su empresa_id
 DO $$ 
 DECLARE 
     tbl TEXT;
 BEGIN
     FOR tbl IN (SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('profiles', 'empresas')) 
     LOOP
-        EXECUTE format('CREATE POLICY %I_all_policy ON public.%I FOR ALL TO authenticated USING (public.is_platform_admin() OR empresa_id = public.get_my_empresa_id()) WITH CHECK (public.is_platform_admin() OR empresa_id = public.get_my_empresa_id());', tbl, tbl);
+        -- Política de SELECT/ALL
+        EXECUTE format('CREATE POLICY "%I_all_policy" ON public.%I FOR ALL TO authenticated USING (public.is_platform_admin() OR empresa_id = public.get_my_empresa_id()) WITH CHECK (public.is_platform_admin() OR empresa_id = public.get_my_empresa_id());', tbl, tbl);
     END LOOP;
 END $$;
 
 -- 5. DATOS DE INICIALIZACIÓN
 
--- Empresa Billennium
+-- Empresa Billennium (Si no existe, se crea)
 INSERT INTO public.empresas (id, ruc, nombre, direccion, telefono)
 VALUES ('00000000-0000-0000-0000-000000000001', '1790000000001', 'Billennium Restaurantes', 'Quito, Ecuador', '0999999999')
 ON CONFLICT (ruc) DO UPDATE SET nombre = EXCLUDED.nombre;
-
--- Superadmin (Nota: El ID debe coincidir con el de auth.users si se crea manualmente)
--- INSERT INTO public.profiles (id, empresa_id, nombre, email, rol)
--- VALUES ('TU_UID_DE_SUPABASE_AUTH', '00000000-0000-0000-0000-000000000001', 'Super Administrador', 'admin@billennium.com', 'admin_plataforma');
 
 -- GRANTS
 GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres;

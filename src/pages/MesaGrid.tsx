@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { mesaService, type Mesa } from '../services/mesaService'
 import { reservaService, type Reserva } from '../services/reservaService'
 import { useAuth, type Profile } from '../contexts/AuthContext'
 import { cn } from '../lib/utils'
 import { Users, Clock, RefreshCw, Plus } from 'lucide-react'
+import { WaiterTableListMobile } from '../components/mobile/WaiterTableListMobile'
 
 interface MesaCardProps {
     mesa: Mesa
@@ -85,8 +87,6 @@ function MesaCard({ mesa, proximaReserva, onClick, onReset, profile }: MesaCardP
         </div>
     )
 }
-
-import { useNavigate } from 'react-router-dom'
 
 export function MesaGrid() {
     const navigate = useNavigate()
@@ -214,6 +214,20 @@ export function MesaGrid() {
                     <div key={i} className="card h-48 animate-pulse bg-slate-100" />
                 ))}
             </div>
+        )
+    }
+
+    // MOBILE VIEW FOR WAITERS
+    if (profile?.rol === 'mesero') {
+        return (
+            <WaiterTableListMobile
+                mesas={mesas}
+                reservas={reservas}
+                onMesaClick={handleMesaClick}
+                filter={filter}
+                setFilter={setFilter}
+                loading={loading}
+            />
         )
     }
 

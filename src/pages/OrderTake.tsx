@@ -16,6 +16,7 @@ import {
 import { pedidoService } from '../services/pedidoService'
 import { mesaService } from '../services/mesaService'
 import { useAuth } from '../contexts/AuthContext'
+import { WaiterOrderTakeMobile } from '../components/mobile/WaiterOrderTakeMobile'
 
 interface CartItem extends Producto {
     cantidad: number
@@ -142,6 +143,25 @@ export function OrderTake() {
             <div className="flex items-center justify-center p-24">
                 <Loader2 className="w-12 h-12 animate-spin text-primary-600" />
             </div>
+        )
+    }
+
+    // MOBILE VIEW FOR WAITERS
+    if (profile?.rol === 'mesero') {
+        return (
+            <WaiterOrderTakeMobile
+                mesaNumero={mesa?.numero || '...'}
+                productos={productos}
+                categorias={categorias}
+                cart={cart}
+                addToCart={addToCart}
+                removeFromCart={removeFromCart}
+                updateCantidad={updateCantidad}
+                onConfirm={handleConfirmarPedido}
+                onBack={() => navigate('/mesas')}
+                submitting={submitting}
+                existingTotal={existingPedido?.total}
+            />
         )
     }
 
