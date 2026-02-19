@@ -69,8 +69,8 @@ export function Dashboard() {
             ])
             setStats(s)
             setRecentPedidos(p)
-        } catch (error) {
-            console.error('Error loading dashboard:', error)
+        } catch {
+            // console.error('Error loading dashboard:', error)
         }
     }
 
@@ -81,7 +81,7 @@ export function Dashboard() {
             await seedService.seedInitialData(empresa.id)
             alert('¡Datos de prueba cargados exitosamente!')
             loadDashboardData()
-        } catch (error) {
+        } catch {
             alert('Error al cargar datos. Revisa la consola.')
         } finally {
             setSeeding(false)

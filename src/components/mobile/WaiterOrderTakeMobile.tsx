@@ -333,7 +333,7 @@ export function WaiterOrderTakeMobile({
                                 >
                                     {submitting ? 'Enviando...' : (
                                         <>
-                                            Confirmar a Cocina <CheckCircle2 className="w-6 h-6" />
+                                            Confirmar Pedido <CheckCircle2 className="w-6 h-6" />
                                         </>
                                     )}
                                 </button>

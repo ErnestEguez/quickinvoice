@@ -29,13 +29,14 @@ export interface IngresoConDetalles extends IngresoStock {
 }
 
 export const inventarioService = {
-    async getIngresosByEmpresa(_empresaId: string): Promise<any[]> {
+    async getIngresosByEmpresa(empresaId: string): Promise<any[]> {
         const { data, error } = await supabase
             .from('ingresos_stock')
             .select(`
                 *,
                 proveedor:proveedores(nombre_empresa)
             `)
+            .eq('empresa_id', empresaId)
             .order('fecha_ingreso', { ascending: false })
 
         if (error) throw error
@@ -90,11 +91,11 @@ export const inventarioService = {
         return ingresoData
     },
 
-    async getStockByEmpresa(_empresaId: string) {
+    async getStockByEmpresa(empresaId: string) {
         const { data, error } = await supabase
             .from('productos')
             .select('id, nombre, stock, costo_promedio, maneja_stock')
-            // .eq('empresa_id', empresaId) // Removed for debugging visibility
+            .eq('empresa_id', empresaId)
             .eq('maneja_stock', true)
             .order('nombre')
 

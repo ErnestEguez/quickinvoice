@@ -47,11 +47,20 @@ export function KitchenOrderPrint() {
         <div className="min-h-screen bg-slate-100 pb-12 print:bg-white print:pb-0">
             {/* Toolbar */}
             <div className="max-w-[80mm] mx-auto pt-6 px-4 flex justify-between items-center print:hidden mb-6">
-                <button onClick={() => navigate(-1)} className="text-slate-600 font-medium flex items-center gap-1">
-                    <ChevronLeft className="w-4 h-4" /> Volver
+                <button
+                    onClick={() => {
+                        if (window.history.length > 1) {
+                            navigate(-1)
+                        } else {
+                            window.close()
+                        }
+                    }}
+                    className="text-slate-600 font-bold bg-white px-4 py-2 rounded-lg border border-slate-200 flex items-center gap-1 active:scale-95 transition-all"
+                >
+                    <ChevronLeft className="w-5 h-5" /> Volver / Cerrar
                 </button>
-                <button onClick={() => window.print()} className="bg-primary-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-lg">
-                    <Printer className="w-4 h-4" /> Imprimir Comanda
+                <button onClick={() => window.print()} className="bg-primary-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 shadow-lg active:scale-95 transition-all">
+                    <Printer className="w-4 h-4" /> Imprimir
                 </button>
             </div>
 

@@ -102,6 +102,11 @@ export function OrderTake() {
     const total = subtotal
 
     const handleDirectBilling = async () => {
+        if (profile?.rol === 'mesero') {
+            alert('Solo puede facturar la caja')
+            return
+        }
+
         if (!confirm('¿Está seguro de Facturar directamente? El pedido se creará y se cobrará en este momento.')) return
 
         const actualUser = user || (profile ? { id: profile.id } : null)
@@ -441,7 +446,7 @@ export function OrderTake() {
                 pedido={existingPedido}
                 onSuccess={() => {
                     alert('Cuenta dividida con éxito. Se han creado nuevos pedidos.');
-                    loadData(); // Recargar para ver cambios
+                    navigate('/mesas');
                 }}
             />
         </>

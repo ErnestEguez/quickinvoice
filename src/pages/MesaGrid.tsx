@@ -207,7 +207,7 @@ export function MesaGrid() {
         try {
             await mesaService.resetMesa(mesa.id)
             loadMesas()
-        } catch (error) {
+        } catch {
             alert('Error al resetear la mesa')
         }
     }

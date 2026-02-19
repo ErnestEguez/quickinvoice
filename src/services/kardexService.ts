@@ -51,7 +51,7 @@ export const kardexService = {
     },
 
     async getKardexByEmpresa(
-        _empresaId: string,
+        empresaId: string,
         fechaInicio?: string,
         fechaFin?: string
     ): Promise<KardexConProducto[]> {
@@ -61,7 +61,7 @@ export const kardexService = {
                 *,
                 producto:productos(nombre)
             `)
-            //.eq('empresa_id', empresaId)
+            .eq('empresa_id', empresaId)
             .order('fecha', { ascending: false })
 
         if (fechaInicio) {
@@ -77,11 +77,11 @@ export const kardexService = {
         return data || []
     },
 
-    async getResumenStock(_empresaId: string) {
+    async getResumenStock(empresaId: string) {
         const { data, error } = await supabase
             .from('productos')
             .select('id, nombre, stock, costo_promedio, maneja_stock')
-            //.eq('empresa_id', empresaId)
+            .eq('empresa_id', empresaId)
             .eq('maneja_stock', true)
             .order('nombre')
 

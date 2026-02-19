@@ -115,9 +115,9 @@ export const pedidoService = {
                 )
             `)
             .eq('empresa_id', empresaId)
-            // Lógica: (Estado != Facturado) OR (Created_at en rango)
-            // Esto asegura que pedidos de "ayer" que siguen abiertos se vean hoy.
-            .or(`estado.neq.facturado,and(created_at.gte.${start.toISOString()},created_at.lte.${end.toISOString()})`)
+            // Lógica: Solo mostrar estados activos (excluir facturado y cancelado)
+            .neq('estado', 'facturado')
+            .neq('estado', 'cancelado')
             .order('created_at', { ascending: false })
 
         if (error) throw error

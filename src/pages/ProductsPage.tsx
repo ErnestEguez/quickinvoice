@@ -51,8 +51,8 @@ export function ProductsPage() {
 
         try {
             if (editingProduct.id) {
-                // Limpiamos el objeto de propiedades relacionales antes de enviar a Supabase
-                const { categorias, ...cleanProduct } = editingProduct as any
+                const cleanProduct = { ...editingProduct } as any
+                delete cleanProduct.categorias
                 await productoService.updateProducto(editingProduct.id, cleanProduct)
             } else {
                 await productoService.createProducto({

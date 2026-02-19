@@ -193,9 +193,18 @@ export const facturacionService = {
             // 2. Actualizar el estado del pedido a 'facturado'
             await supabase.from('pedidos').update({ estado: 'facturado' }).eq('id', pedido.id)
 
-            // 3. Liberar la mesa
+            // 3. Liberar la mesa (solo si no hay otros pedidos activos en ella)
             if (pedido.mesa_id) {
-                await supabase.from('mesas').update({ estado: 'libre' }).eq('id', pedido.mesa_id)
+                const { count } = await supabase
+                    .from('pedidos')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('mesa_id', pedido.mesa_id)
+                    .neq('id', pedido.id) // Excluir el pedido actual que acabamos de facturar
+                    .in('estado', ['pendiente', 'en_preparacion', 'servido'])
+
+                if (!count || count === 0) {
+                    await supabase.from('mesas').update({ estado: 'libre' }).eq('id', pedido.mesa_id)
+                }
             }
 
             // 4. Salida de Kardex (Inventario)

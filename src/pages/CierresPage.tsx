@@ -3,13 +3,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { formatCurrency, cn } from '../lib/utils'
 import {
-    CalendarDays,
     Search,
-    Trash2,
-    Eye,
-    AlertTriangle,
-    Printer,
-    FileText
+    Trash2
 } from 'lucide-react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'

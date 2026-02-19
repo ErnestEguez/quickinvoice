@@ -57,7 +57,8 @@ export const staffService = {
         }
 
         // Remove password before saving to profiles table
-        const { password, ...profileData } = member
+        const profileData = { ...member }
+        delete profileData.password
 
         const { data, error } = await supabase
             .from('profiles')

@@ -14,11 +14,11 @@ export interface Proveedor {
 }
 
 export const proveedoresService = {
-    async getProveedoresByEmpresa(_empresaId: string): Promise<Proveedor[]> {
+    async getProveedoresByEmpresa(empresaId: string): Promise<Proveedor[]> {
         const { data, error } = await supabase
             .from('proveedores')
             .select('*')
-            //.eq('empresa_id', empresaId)
+            .eq('empresa_id', empresaId)
             .order('nombre_empresa', { ascending: true })
 
         if (error) throw error

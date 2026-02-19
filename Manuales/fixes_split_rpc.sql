@@ -76,6 +76,7 @@ BEGIN
         -- Si no quedan hijos, ya no es división
         UPDATE public.pedidos 
         SET es_division = FALSE,
+            estado = 'pendiente', -- Restaurar a pendiente para que sea visible
             nombre_cliente_mesa = NULL,
             identificacion_cliente_mesa = NULL
         WHERE id = v_padre_id;

@@ -21,7 +21,7 @@ interface BillingModalProps {
 }
 
 export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModalProps) {
-    const { empresa, cajaSesion } = useAuth()
+    const { empresa, cajaSesion, profile } = useAuth()
     const [clients, setClients] = useState<any[]>([])
     const [searchClient, setSearchClient] = useState('')
     const [selectedClient, setSelectedClient] = useState<any>(null)
@@ -29,7 +29,6 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
     const [isSavingInvoice, setIsSavingInvoice] = useState(false)
     const [isClientFormOpen, setIsClientFormOpen] = useState(false)
     const [sriSystemFinanciero, setSriSystemFinanciero] = useState(false)
-    const [loading, setLoading] = useState(true)
     const [newClient, setNewClient] = useState({
         identificacion: '',
         nombre: '',
@@ -46,7 +45,6 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
 
     async function loadInitialData() {
         try {
-            setLoading(true)
             const [clientsList, consumidor] = await Promise.all([
                 facturacionService.getClientes(empresa!.id),
                 facturacionService.getConsumidorFinal(empresa!.id)
@@ -79,8 +77,6 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
             }
         } catch (error) {
             console.error('Error loading billing data:', error)
-        } finally {
-            setLoading(false)
         }
     }
 
@@ -147,8 +143,10 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
     }
 
     const handleExecuteInvoicing = async () => {
-        if (!selectedClient) {
-            alert('Por favor selecciona un cliente')
+        if (!pedido || !selectedClient) return
+
+        if (pedido.total <= 0) {
+            alert('No se puede facturar un pedido con valor $0.00. Si el pedido está vacío, debe ser cancelado.')
             return
         }
 
@@ -405,25 +403,31 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
                             onClick={onClose}
                             className="flex-1 px-4 py-3 rounded-xl border border-slate-200 font-bold text-slate-600 hover:bg-white transition-colors"
                         >
-                            Cancelar
+                            {profile?.rol === 'mesero' ? 'Cerrar' : 'Cancelar'}
                         </button>
-                        <button
-                            onClick={handleExecuteInvoicing}
-                            disabled={isSavingInvoice || Math.abs(totalPagado - pedido.total) > 0.01}
-                            className="flex-2 bg-primary-600 text-white rounded-xl px-8 py-3 font-bold hover:bg-primary-700 shadow-xl shadow-primary-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale transition-all"
-                        >
-                            {isSavingInvoice ? (
-                                <>
-                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    Procesando...
-                                </>
-                            ) : (
-                                <>
-                                    <Save className="w-5 h-5" />
-                                    Confirmar y Emitir Factura
-                                </>
-                            )}
-                        </button>
+                        {profile?.rol !== 'mesero' ? (
+                            <button
+                                onClick={handleExecuteInvoicing}
+                                disabled={isSavingInvoice || Math.abs(totalPagado - pedido.total) > 0.01}
+                                className="flex-2 bg-primary-600 text-white rounded-xl px-8 py-3 font-bold hover:bg-primary-700 shadow-xl shadow-primary-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale transition-all"
+                            >
+                                {isSavingInvoice ? (
+                                    <>
+                                        <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        Procesando...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Save className="w-5 h-5" />
+                                        Confirmar y Emitir Factura
+                                    </>
+                                )}
+                            </button>
+                        ) : (
+                            <div className="flex-2 bg-slate-100 text-slate-500 rounded-xl px-4 py-3 text-xs font-bold flex items-center justify-center text-center">
+                                Solo personal de caja puede emitir facturas
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

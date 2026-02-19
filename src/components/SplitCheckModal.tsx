@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 import { Plus, Minus, Trash2, ChevronRight, ChevronLeft, Check, Split, X, Mail, Search } from 'lucide-react'
 import { formatCurrency } from '../lib/utils'
 import { pedidoService } from '../services/pedidoService'
@@ -33,10 +34,12 @@ interface ClienteSplit {
 export function SplitCheckModal({ isOpen, onClose, pedido, onSuccess }: SplitCheckModalProps) {
     const { empresa } = useAuth()
     const [step, setStep] = useState(1)
-    const [clientes, setClientes] = useState<ClienteSplit[]>([])
+    const [clientes, setClientes] = useState<ClienteSplit[]>([]) // Kept ClienteSplit[] as it was the original type
     const [itemsOriginales, setItemsOriginales] = useState<ItemSplit[]>([])
     const [loading, setLoading] = useState(false)
-    const [nombreOriginal, setNombreOriginal] = useState('')
+    const [nombreOriginal, setNombreOriginal] = useState(pedido?.nombre_cliente_mesa || '')
+    const [identificacionOriginal, setIdentificacionOriginal] = useState(pedido?.identificacion_cliente_mesa || '')
+    const [emailOriginal, setEmailOriginal] = useState(pedido?.email_cliente_mesa || '')
 
     // Para búsqueda de clientes existentes
     const [clientesBD, setClientesBD] = useState<any[]>([])
@@ -61,14 +64,16 @@ export function SplitCheckModal({ isOpen, onClose, pedido, onSuccess }: SplitChe
             setLoading(false)
             setBusquedas({})
             setBusquedaOriginal('')
-            setNombreOriginal(pedido.nombre_cliente_mesa || `Mesa ${pedido?.mesas?.numero || ''}`)
+            setNombreOriginal(pedido?.nombre_cliente_mesa || `Mesa ${pedido?.mesas?.numero || ''}`)
+            setIdentificacionOriginal(pedido?.identificacion_cliente_mesa || '')
+            setEmailOriginal(pedido?.email_cliente_mesa || '')
 
             // Cargar clientes existentes para búsqueda
             if (empresa?.id) {
                 facturacionService.getClientes(empresa.id).then(setClientesBD).catch(console.error)
             }
         }
-    }, [isOpen, pedido])
+    }, [isOpen, pedido, empresa?.id]) // Added dependencies for useEffect
 
     const handleAddClient = () => {
         const nextId = clientes.length + 2
@@ -175,49 +180,96 @@ export function SplitCheckModal({ isOpen, onClose, pedido, onSuccess }: SplitChe
     const originalTieneItems = itemsOriginales.some(i => i.cantidad > 0)
 
     const handleNextStep = () => {
-        if (step === 1 && clientes.length === 0) {
-            alert('Agrega al menos una persona adicional')
-            return
-        }
-        if (step === 2) {
-            // Validar que el pedido original tenga al menos un ítem (Bug 2)
-            if (!originalTieneItems) {
-                alert('El pedido original (Mesa Principal) no puede quedar vacío. Por favor devuelve al menos un producto al cliente principal.')
-                return
-            }
-        }
+        // Removed the validation for clientes.length === 0
         setStep(step + 1)
     }
 
     const handleConfirm = async () => {
         if (!pedido) return
 
-        // Doble validación antes de confirmar
-        if (!originalTieneItems) {
-            alert('El pedido original no puede quedar sin items. Devuelve al menos un producto al cliente principal.')
-            return
-        }
-
         setLoading(true)
         try {
-            const nuevosPedidosPayload = clientes.map(c => ({
-                nombre_cliente: c.nombre,
-                identificacion_cliente: c.identificacion,
-                email_cliente: c.email,
-                items: c.items.filter(i => i.cantidad > 0).map(i => ({
-                    producto_id: i.producto_id,
-                    cantidad: i.cantidad,
-                    precio: i.precio
-                }))
-            })).filter(p => p.items.length > 0)
+            // 1. Persistir clientes nuevos en la tabla maestra (evitar duplicados)
+            const upsertCliente = async (nombre: string, identificacion: string, email: string) => {
+                if (!identificacion || identificacion === '9999999999999') return null
 
-            if (nuevosPedidosPayload.length === 0) {
-                alert('No has asignado items a ningún cliente adicional. Si no necesitas dividir, cierra este modal.')
+                // Buscar si existe
+                const { data: existing } = await supabase
+                    .from('clientes')
+                    .select('id')
+                    .eq('empresa_id', pedido.empresa_id)
+                    .eq('identificacion', identificacion)
+                    .maybeSingle()
+
+                if (existing) return existing.id
+
+                // Crear si no existe
+                const { data: nuevo, error: errorIns } = await supabase
+                    .from('clientes')
+                    .insert({
+                        empresa_id: pedido.empresa_id,
+                        nombre,
+                        identificacion,
+                        email,
+                        direccion: 'S/N'
+                    })
+                    .select('id')
+                    .single()
+
+                if (errorIns) console.error('Error creando cliente en split:', errorIns)
+                return nuevo?.id || null
+            }
+
+            // Guardar cliente original si tiene datos nuevos
+            await upsertCliente(nombreOriginal, identificacionOriginal, emailOriginal)
+
+            const nuevosPedidosPayload = []
+            for (const c of clientes) {
+                const itemsValidos = c.items.filter(i => i.cantidad > 0)
+                if (itemsValidos.length > 0) {
+                    // Guardar este cliente en la maestra
+                    await upsertCliente(c.nombre, c.identificacion || '', c.email || '') // Added default empty string for optional fields
+
+                    nuevosPedidosPayload.push({
+                        nombre_cliente: c.nombre,
+                        identificacion_cliente: c.identificacion,
+                        email_cliente: c.email,
+                        items: itemsValidos.map(i => ({
+                            producto_id: i.producto_id,
+                            cantidad: i.cantidad,
+                            precio: i.precio
+                        }))
+                    })
+                }
+            }
+
+            if (nuevosPedidosPayload.length === 0 && !originalTieneItems) { // Added check for original having items
+                alert('No has asignado items a ningún cliente adicional y el cliente principal tampoco tiene ítems. Si no necesitas dividir, cierra este modal.')
                 setLoading(false)
                 return
             }
 
+            // 2. Ejecutar división
             await pedidoService.dividirPedido(pedido.id, nuevosPedidosPayload, nombreOriginal)
+
+            // 3. Si el nombre original tiene CI/Email, actualizarlos en el pedido original (el RPC solo actualiza el nombre)
+            // Además, si el original quedó vacío, marcarlo como 'cancelado' para que no salga factura en cero.
+            const updates: any = {}
+            if (identificacionOriginal || emailOriginal) {
+                updates.identificacion_cliente_mesa = identificacionOriginal
+                updates.email_cliente_mesa = emailOriginal
+            }
+            if (!originalTieneItems) {
+                updates.estado = 'cancelado'
+            }
+
+            if (Object.keys(updates).length > 0) {
+                await supabase
+                    .from('pedidos')
+                    .update(updates)
+                    .eq('id', pedido.id)
+            }
+
             onSuccess()
             onClose()
         } catch (error: any) {
@@ -280,8 +332,6 @@ export function SplitCheckModal({ isOpen, onClose, pedido, onSuccess }: SplitChe
                                                 setBusquedaOriginal(e.target.value)
                                                 setNombreOriginal(e.target.value)
                                             }}
-                                            className="w-full pl-8 pr-3 py-2 bg-white rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary-500 outline-none text-sm"
-                                            placeholder="Nombre Cliente Principal o buscar..."
                                         />
                                         {busquedaOriginal && filtrarClientesBD(busquedaOriginal).length > 0 && (
                                             <div className="absolute top-full left-0 right-0 z-10 bg-white border border-slate-200 rounded-lg shadow-lg mt-1 max-h-32 overflow-y-auto">
@@ -291,6 +341,8 @@ export function SplitCheckModal({ isOpen, onClose, pedido, onSuccess }: SplitChe
                                                         type="button"
                                                         onClick={() => {
                                                             setNombreOriginal(c.nombre)
+                                                            setIdentificacionOriginal(c.identificacion)
+                                                            setEmailOriginal(c.email || '')
                                                             setBusquedaOriginal('')
                                                         }}
                                                         className="w-full text-left px-3 py-2 text-sm hover:bg-primary-50 flex justify-between"
@@ -301,6 +353,22 @@ export function SplitCheckModal({ isOpen, onClose, pedido, onSuccess }: SplitChe
                                                 ))}
                                             </div>
                                         )}
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <input
+                                            type="text"
+                                            value={identificacionOriginal}
+                                            onChange={(e) => setIdentificacionOriginal(e.target.value)}
+                                            className="px-3 py-2 bg-white rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary-500 outline-none text-sm font-mono"
+                                            placeholder="C.I. / RUC (Principal)"
+                                        />
+                                        <input
+                                            type="email"
+                                            value={emailOriginal}
+                                            onChange={(e) => setEmailOriginal(e.target.value)}
+                                            className="px-3 py-2 bg-white rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary-500 outline-none text-sm"
+                                            placeholder="Correo (Principal)"
+                                        />
                                     </div>
                                     <p className="text-xs text-slate-400 italic">Los ítems que no asignes a otros clientes quedarán en este pedido.</p>
                                 </div>
@@ -393,7 +461,7 @@ export function SplitCheckModal({ isOpen, onClose, pedido, onSuccess }: SplitChe
                                 <div className="p-3 bg-slate-100 font-bold text-slate-700 text-center border-b border-slate-200">
                                     Mesa Principal (Original)
                                     {!originalTieneItems && (
-                                        <span className="ml-2 text-xs text-red-500 font-normal">(⚠ sin ítems — debe tener al menos uno)</span>
+                                        <span className="ml-2 text-xs text-amber-500 font-normal">(Vacío — se liberará o quedará en $0)</span>
                                     )}
                                 </div>
                                 <div className="flex-1 overflow-y-auto p-2 space-y-2">
@@ -421,9 +489,8 @@ export function SplitCheckModal({ isOpen, onClose, pedido, onSuccess }: SplitChe
                                         </div>
                                     )))}
                                     {itemsOriginales.every(i => i.cantidad === 0) && (
-                                        <div className="text-center p-8 text-red-400 font-medium">
-                                            ⚠ No quedan ítems en el pedido original.<br />
-                                            <span className="text-xs">Devuelve al menos un ítem antes de continuar.</span>
+                                        <div className="text-center p-8 text-slate-400 font-medium italic">
+                                            Todos los ítems han sido distribuidos entre los comensales adicionales.
                                         </div>
                                     )}
                                 </div>
