@@ -21,13 +21,15 @@ import {
     RefreshCcw,
     X,
     ArrowLeft,
-    Bomb
+    Bomb,
+    Tag
 } from 'lucide-react'
+import { categoriaService, type Categoria } from '../services/categoriaService'
 import { cn } from '../lib/utils'
 
 export function ConfigurationPage() {
     const { empresa, profile } = useAuth()
-    const [activeTab, setActiveTab] = useState<'empresa' | 'staff' | 'mesas' | 'plataforma'>('empresa')
+    const [activeTab, setActiveTab] = useState<'empresa' | 'staff' | 'mesas' | 'categorias' | 'plataforma'>('empresa')
     const [platformSubTab, setPlatformSubTab] = useState<'empresas' | 'personal'>('empresas')
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
@@ -51,6 +53,11 @@ export function ConfigurationPage() {
     const [mesas, setMesas] = useState<Mesa[]>([])
     const [isMesaModalOpen, setIsMesaModalOpen] = useState(false)
     const [editingMesa, setEditingMesa] = useState<Partial<Mesa> | null>(null)
+
+    // Categorias State
+    const [categorias, setCategorias] = useState<Categoria[]>([])
+    const [isCategoriaModalOpen, setIsCategoriaModalOpen] = useState(false)
+    const [editingCategoria, setEditingCategoria] = useState<Partial<Categoria> | null>(null)
 
     // Plataforma State (Admin)
     const [allEmpresas, setAllEmpresas] = useState<any[]>([])
@@ -137,10 +144,11 @@ export function ConfigurationPage() {
 
             if (empresa?.id) {
                 console.log('Company Mode: Fetching data for', empresa.id);
-                const [empData, staffData, mesasData] = await Promise.all([
+                const [empData, staffData, mesasData, categoriasData] = await Promise.all([
                     supabase.from('empresas').select('*').eq('id', empresa!.id).single(),
                     staffService.getStaffByEmpresa(empresa!.id),
-                    mesaService.getMesas()
+                    mesaService.getMesas(),
+                    categoriaService.getCategorias(empresa!.id)
                 ])
                 if (empData.data) setCompanyData(empData.data)
                 // Filter: No mostrar al propio usuario logueado en la lista de personal de servicio 
@@ -151,6 +159,7 @@ export function ConfigurationPage() {
                 )
                 setStaff(filteredStaff)
                 setMesas(mesasData)
+                setCategorias(categoriasData)
             }
         } catch (error) {
             console.error('Error loading config:', error)
@@ -313,6 +322,43 @@ export function ConfigurationPage() {
         }
     }
 
+    async function handleSaveCategoria() {
+        try {
+            setSaving(true)
+            if (!editingCategoria?.nombre) {
+                alert('El nombre es obligatorio')
+                return
+            }
+
+            if (editingCategoria.id) {
+                await categoriaService.updateCategoria(editingCategoria.id, editingCategoria)
+            } else {
+                await categoriaService.createCategoria({
+                    ...editingCategoria,
+                    empresa_id: empresa!.id,
+                })
+            }
+
+            setIsCategoriaModalOpen(false)
+            setEditingCategoria(null)
+            loadData()
+        } catch (error: any) {
+            alert(`Error al guardar categoría: ${error.message}`)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    async function handleDeleteCategoria(id: string) {
+        if (!confirm('¿Estás seguro de eliminar esta categoría?')) return
+        try {
+            await categoriaService.deleteCategoria(id)
+            loadData()
+        } catch (error: any) {
+            alert(`Error al eliminar categoría: ${error.message}`)
+        }
+    }
+
     async function handleNuclearReset(id: string, nombre: string) {
         if (!confirm(`⚠️ ALERTA NUCLEAR ⚠️\n\n¿Estás seguro de borrar TODO el movimiento transaccional de "${nombre}"?\n\nEsto eliminará pedidos, facturas, kardex e inventario de prueba. Esta acción es IRREVERSIBLE.`)) return
 
@@ -410,6 +456,18 @@ export function ConfigurationPage() {
                         >
                             <Grid className="w-4 h-4" />
                             Mesas
+                        </button>
+                    )}
+                    {profile?.rol === 'oficina' && (
+                        <button
+                            onClick={() => setActiveTab('categorias')}
+                            className={cn(
+                                "flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all",
+                                activeTab === 'categorias' ? "bg-white text-primary-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                            )}
+                        >
+                            <Tag className="w-4 h-4" />
+                            Categorías
                         </button>
                     )}
                 </div>
@@ -661,6 +719,48 @@ export function ConfigurationPage() {
                         ))}
                     </div>
                 </div>
+            ) : activeTab === 'categorias' ? (
+                <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
+                    <div className="flex items-center justify-between pb-4 border-b border-slate-200">
+                        <div>
+                            <h2 className="text-lg font-bold text-slate-900">Categorías de Productos</h2>
+                            <p className="text-sm text-slate-500">Administra las clasificaciones para tu menú e inventario</p>
+                        </div>
+                        <button
+                            onClick={() => {
+                                setEditingCategoria({ nombre: '', tipo: 'ALIMENTO' })
+                                setIsCategoriaModalOpen(true)
+                            }}
+                            className="btn btn-primary py-2 px-4 text-sm flex items-center gap-2"
+                        >
+                            <Plus className="w-4 h-4" /> Nueva Categoría
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        {categorias.map(cat => (
+                            <div key={cat.id} className="card p-6 group relative hover:shadow-lg transition-all border-l-4 border-l-primary-500">
+                                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button onClick={() => { setEditingCategoria(cat); setIsCategoriaModalOpen(true) }} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400">
+                                        <Edit2 className="w-4 h-4" />
+                                    </button>
+                                    <button onClick={() => handleDeleteCategoria(cat.id)} className="p-1.5 hover:bg-slate-100 rounded-lg text-red-400">
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
+                                </div>
+                                <div className="space-y-1">
+                                    <h3 className="font-bold text-slate-900 text-lg uppercase tracking-tight">{cat.nombre}</h3>
+                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{cat.tipo || 'General'}</p>
+                                </div>
+                            </div>
+                        ))}
+                        {categorias.length === 0 && (
+                            <div className="col-span-full py-12 text-center text-slate-400 font-medium">
+                                No hay categorías registradas.
+                            </div>
+                        )}
+                    </div>
+                </div>
             ) : (
                 <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4">
                     {/* Sub-tabs for Platform Admin */}
@@ -892,130 +992,133 @@ export function ConfigurationPage() {
             )}
 
             {/* Modals */}
-            {isEmpresaModalOpen && (
-                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-8 space-y-6 my-8">
-                        <div className="flex justify-between items-center">
-                            <h2 className="text-2xl font-bold">{editingEmpresa?.id ? 'Editar' : 'Nueva'} Empresa</h2>
-                            <button onClick={() => setIsEmpresaModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400">
-                                <X className="w-6 h-6" />
-                            </button>
-                        </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                            <div className="space-y-4">
-                                <div>
-                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Nombre Comercial</label>
-                                    <input
-                                        type="text" placeholder="Nombre de la empresa" className="w-full px-4 py-3 rounded-xl border mt-1"
-                                        value={editingEmpresa?.nombre || ''}
-                                        onChange={e => setEditingEmpresa({ ...editingEmpresa, nombre: e.target.value })}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">RUC</label>
-                                    <input
-                                        type="text" placeholder="Número de RUC" className="w-full px-4 py-3 rounded-xl border mt-1"
-                                        value={editingEmpresa?.ruc || ''}
-                                        onChange={e => setEditingEmpresa({ ...editingEmpresa, ruc: e.target.value })}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Dirección Matriz</label>
-                                    <input
-                                        type="text" placeholder="Ciudad, Calle, Edificio..." className="w-full px-4 py-3 rounded-xl border mt-1"
-                                        value={editingEmpresa?.direccion_matriz || ''}
-                                        onChange={e => setEditingEmpresa({ ...editingEmpresa, direccion_matriz: e.target.value })}
-                                    />
-                                </div>
+            {/* Modals */}
+            {
+                isEmpresaModalOpen && (
+                    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-8 space-y-6 my-8">
+                            <div className="flex justify-between items-center">
+                                <h2 className="text-2xl font-bold">{editingEmpresa?.id ? 'Editar' : 'Nueva'} Empresa</h2>
+                                <button onClick={() => setIsEmpresaModalOpen(false)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400">
+                                    <X className="w-6 h-6" />
+                                </button>
                             </div>
 
-                            <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-4">
                                     <div>
-                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">IVA (%)</label>
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Nombre Comercial</label>
                                         <input
-                                            type="number" className="w-full px-4 py-3 rounded-xl border mt-1"
-                                            value={editingEmpresa?.config_iva || 15}
-                                            onChange={e => setEditingEmpresa({ ...editingEmpresa, config_iva: parseFloat(e.target.value) })}
+                                            type="text" placeholder="Nombre de la empresa" className="w-full px-4 py-3 rounded-xl border mt-1"
+                                            value={editingEmpresa?.nombre || ''}
+                                            onChange={e => setEditingEmpresa({ ...editingEmpresa, nombre: e.target.value })}
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Propina (%)</label>
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">RUC</label>
                                         <input
-                                            type="number" className="w-full px-4 py-3 rounded-xl border mt-1"
-                                            value={editingEmpresa?.config_propina || 10}
-                                            onChange={e => setEditingEmpresa({ ...editingEmpresa, config_propina: parseFloat(e.target.value) })}
+                                            type="text" placeholder="Número de RUC" className="w-full px-4 py-3 rounded-xl border mt-1"
+                                            value={editingEmpresa?.ruc || ''}
+                                            onChange={e => setEditingEmpresa({ ...editingEmpresa, ruc: e.target.value })}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Dirección Matriz</label>
+                                        <input
+                                            type="text" placeholder="Ciudad, Calle, Edificio..." className="w-full px-4 py-3 rounded-xl border mt-1"
+                                            value={editingEmpresa?.direccion_matriz || ''}
+                                            onChange={e => setEditingEmpresa({ ...editingEmpresa, direccion_matriz: e.target.value })}
                                         />
                                     </div>
                                 </div>
 
-                                <div>
-                                    <select
-                                        className="w-full px-4 py-3 rounded-xl border mt-1 bg-white"
-                                        value={editingEmpresa?.activo === false ? 'inactivo' : 'activo'}
-                                        onChange={e => setEditingEmpresa({ ...editingEmpresa, activo: e.target.value === 'activo' })}
-                                    >
-                                        <option value="activo">Activo</option>
-                                        <option value="inactivo">No Activo</option>
-                                    </select>
-                                </div>
-
-                                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
-                                    <div>
-                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Funciones Extra</label>
-                                        <span className="text-sm font-bold text-slate-700">Dividir Cuentas</span>
+                                <div className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest">IVA (%)</label>
+                                            <input
+                                                type="number" className="w-full px-4 py-3 rounded-xl border mt-1"
+                                                value={editingEmpresa?.config_iva || 15}
+                                                onChange={e => setEditingEmpresa({ ...editingEmpresa, config_iva: parseFloat(e.target.value) })}
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Propina (%)</label>
+                                            <input
+                                                type="number" className="w-full px-4 py-3 rounded-xl border mt-1"
+                                                value={editingEmpresa?.config_propina || 10}
+                                                onChange={e => setEditingEmpresa({ ...editingEmpresa, config_propina: parseFloat(e.target.value) })}
+                                            />
+                                        </div>
                                     </div>
-                                    <button
-                                        onClick={() => setEditingEmpresa({ ...editingEmpresa, habilitar_division_cuenta: !editingEmpresa?.habilitar_division_cuenta })}
-                                        className={cn(
-                                            "w-12 h-6 rounded-full transition-colors relative",
-                                            editingEmpresa?.habilitar_division_cuenta ? "bg-primary-600" : "bg-slate-300"
-                                        )}
-                                    >
-                                        <div className={cn(
-                                            "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
-                                            editingEmpresa?.habilitar_division_cuenta ? "left-7" : "left-1"
-                                        )} />
-                                    </button>
-                                </div>
 
-                                <div>
-                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Logo (Upload)</label>
-                                    <input
-                                        type="file" accept="image/*"
-                                        className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 mt-2"
-                                        onChange={async (e) => {
-                                            const file = e.target.files?.[0]
-                                            if (!file || !editingEmpresa?.id) {
-                                                if (!editingEmpresa?.id) alert('Guarde la empresa primero para subir un logo.')
-                                                return
-                                            }
-                                            try {
-                                                const url = await sriService.uploadLogo(editingEmpresa.id, file)
-                                                setEditingEmpresa({ ...editingEmpresa, logo_url: url })
-                                            } catch (err: any) {
-                                                alert('Error al subir logo: ' + err.message)
-                                            }
-                                        }}
-                                    />
+                                    <div>
+                                        <select
+                                            className="w-full px-4 py-3 rounded-xl border mt-1 bg-white"
+                                            value={editingEmpresa?.activo === false ? 'inactivo' : 'activo'}
+                                            onChange={e => setEditingEmpresa({ ...editingEmpresa, activo: e.target.value === 'activo' })}
+                                        >
+                                            <option value="activo">Activo</option>
+                                            <option value="inactivo">No Activo</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
+                                        <div>
+                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Funciones Extra</label>
+                                            <span className="text-sm font-bold text-slate-700">Dividir Cuentas</span>
+                                        </div>
+                                        <button
+                                            onClick={() => setEditingEmpresa({ ...editingEmpresa, habilitar_division_cuenta: !editingEmpresa?.habilitar_division_cuenta })}
+                                            className={cn(
+                                                "w-12 h-6 rounded-full transition-colors relative",
+                                                editingEmpresa?.habilitar_division_cuenta ? "bg-primary-600" : "bg-slate-300"
+                                            )}
+                                        >
+                                            <div className={cn(
+                                                "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
+                                                editingEmpresa?.habilitar_division_cuenta ? "left-7" : "left-1"
+                                            )} />
+                                        </button>
+                                    </div>
+
+                                    <div>
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Logo (Upload)</label>
+                                        <input
+                                            type="file" accept="image/*"
+                                            className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 mt-2"
+                                            onChange={async (e) => {
+                                                const file = e.target.files?.[0]
+                                                if (!file || !editingEmpresa?.id) {
+                                                    if (!editingEmpresa?.id) alert('Guarde la empresa primero para subir un logo.')
+                                                    return
+                                                }
+                                                try {
+                                                    const url = await sriService.uploadLogo(editingEmpresa.id, file)
+                                                    setEditingEmpresa({ ...editingEmpresa, logo_url: url })
+                                                } catch (err: any) {
+                                                    alert('Error al subir logo: ' + err.message)
+                                                }
+                                            }}
+                                        />
+                                    </div>
                                 </div>
                             </div>
-                        </div>
 
-                        <div className="flex gap-4 pt-4">
-                            <button onClick={() => setIsEmpresaModalOpen(false)} className="flex-1 py-4 font-bold border rounded-2xl hover:bg-slate-50 transition-colors">Cancelar</button>
-                            <button
-                                onClick={handleSaveEmpresaFull}
-                                disabled={saving}
-                                className="flex-1 py-4 font-bold bg-primary-600 text-white rounded-2xl hover:bg-primary-700 transition-colors flex items-center justify-center gap-2"
-                            >
-                                {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" /> Guardar Empresa</>}
-                            </button>
+                            <div className="flex gap-4 pt-4">
+                                <button onClick={() => setIsEmpresaModalOpen(false)} className="flex-1 py-4 font-bold border rounded-2xl hover:bg-slate-50 transition-colors">Cancelar</button>
+                                <button
+                                    onClick={handleSaveEmpresaFull}
+                                    disabled={saving}
+                                    className="flex-1 py-4 font-bold bg-primary-600 text-white rounded-2xl hover:bg-primary-700 transition-colors flex items-center justify-center gap-2"
+                                >
+                                    {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <><Save className="w-5 h-5" /> Guardar Empresa</>}
+                                </button>
+                            </div>
                         </div>
                     </div>
-                </div>
-            )
+                )
             }
 
             {
@@ -1180,6 +1283,41 @@ export function ConfigurationPage() {
                     </div>
                 )
             }
+            {
+                isCategoriaModalOpen && (
+                    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 space-y-6">
+                            <h2 className="text-xl font-bold">{editingCategoria?.id ? 'Editar' : 'Nueva'} Categoría</h2>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Nombre de Categoría</label>
+                                    <input
+                                        type="text" placeholder="Ej: Entradas, Bebidas, Postres..." className="w-full px-4 py-3 rounded-xl border mt-1 font-bold"
+                                        value={editingCategoria?.nombre || ''}
+                                        onChange={e => setEditingCategoria({ ...editingCategoria, nombre: e.target.value })}
+                                        autoFocus
+                                    />
+                                </div>
+                                <div>
+                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Tipo</label>
+                                    <select
+                                        className="w-full px-4 py-3 rounded-xl border mt-1 bg-white"
+                                        value={editingCategoria?.tipo || 'ALIMENTO'}
+                                        onChange={e => setEditingCategoria({ ...editingCategoria, tipo: e.target.value })}
+                                    >
+                                        <option value="ALIMENTO">Restaurante / Alimentos</option>
+                                        <option value="BEBIDA">Bebidas / Bar</option>
+                                        <option value="OTROS">Otros</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="flex gap-4 pt-2">
+                                <button onClick={() => setIsCategoriaModalOpen(false)} className="flex-1 py-3 font-bold border rounded-xl hover:bg-slate-50 transition-colors">Cancelar</button>
+                                <button onClick={handleSaveCategoria} className="flex-1 py-3 font-bold bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors">Guardar</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
         </div>
     )
 }
