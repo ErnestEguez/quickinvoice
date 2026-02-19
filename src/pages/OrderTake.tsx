@@ -392,14 +392,16 @@ export function OrderTake() {
                                     </div>
                                 </div>
 
-                                <button
-                                    disabled={(cart.length === 0 && !existingPedido) || submitting}
-                                    onClick={handleDirectBilling}
-                                    className="btn bg-amber-600 hover:bg-amber-700 text-white w-full py-3 rounded-xl font-bold mb-4 flex items-center justify-center gap-2 shadow-lg shadow-amber-200"
-                                >
-                                    <CreditCard className="w-5 h-5" />
-                                    Ir a Facturar Directo
-                                </button>
+                                {!isMesero && (
+                                    <button
+                                        disabled={(cart.length === 0 && !existingPedido) || submitting}
+                                        onClick={handleDirectBilling}
+                                        className="btn bg-amber-600 hover:bg-amber-700 text-white w-full py-3 rounded-xl font-bold mb-4 flex items-center justify-center gap-2 shadow-lg shadow-amber-200"
+                                    >
+                                        <CreditCard className="w-5 h-5" />
+                                        Ir a Facturar Directo
+                                    </button>
+                                )}
                                 <button
                                     disabled={(cart.length === 0 && !existingPedido) || submitting}
                                     onClick={handleConfirmarPedido}

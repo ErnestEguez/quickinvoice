@@ -283,37 +283,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         )
     }
 
-    // PANTALLA DE ESPERA DE CAJA (para meseros/cocina cuando no hay caja abierta)
-    if (cajaBloqueada && user) {
-        const sinCaja = cajaBloqueada === 'SIN_CAJA';
+    // PANTALLA DE ESPERA DE CAJA (solo para cuando hay caja de OTRO usuario que bloquea)
+    // Nota: SIN_CAJA NO bloquea la pantalla — el mesero puede tomar pedidos sin caja abierta
+    if (cajaBloqueada && cajaBloqueada !== 'SIN_CAJA' && user) {
         return (
             <div className="min-h-screen flex flex-col items-center justify-center bg-slate-100 p-6 text-center">
                 <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full">
-                    <div className={`w-16 h-16 ${sinCaja ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'} rounded-full flex items-center justify-center mx-auto mb-6`}>
+                    <div className="w-16 h-16 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6">
                         <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                         </svg>
                     </div>
-                    {sinCaja ? (
-                        <>
-                            <h2 className="text-2xl font-bold text-slate-800 mb-2">Caja no iniciada</h2>
-                            <p className="text-slate-600 mb-6">
-                                No hay una caja abierta todavía.<br /><br />
-                                <strong>Un usuario de Oficina debe iniciar la caja</strong> antes de que puedas operar como mesero.
-                                <br /><br />
-                                Por favor solicita al administrador que inicie sesión primero.
-                            </p>
-                        </>
-                    ) : (
-                        <>
-                            <h2 className="text-2xl font-bold text-slate-800 mb-2">Caja Cerrada para Ti</h2>
-                            <p className="text-slate-600 mb-6">
-                                La caja está actualmente abierta por <strong>{cajaBloqueada}</strong>.
-                                <br /><br />
-                                No puedes acceder al sistema hasta que el usuario anterior cierre su turno.
-                            </p>
-                        </>
-                    )}
+                    <h2 className="text-2xl font-bold text-slate-800 mb-2">Caja Cerrada para Ti</h2>
+                    <p className="text-slate-600 mb-6">
+                        La caja está actualmente abierta por <strong>{cajaBloqueada}</strong>.
+                        <br /><br />
+                        No puedes acceder al sistema hasta que el usuario anterior cierre su turno.
+                    </p>
                     <button
                         onClick={() => signOut()}
                         className="w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-3 px-4 rounded-xl transition-colors"
