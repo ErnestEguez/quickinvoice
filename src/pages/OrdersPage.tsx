@@ -11,22 +11,14 @@ import {
     ChevronUp,
     CreditCard,
     Printer,
-    RefreshCw,
-    Plus,
-    Trash2,
-    X,
-    Save,
-    User
+    RefreshCw
 } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
 import { BillingModal } from '../components/BillingModal'
 
 export function OrdersPage() {
     const { empresa, profile } = useAuth()
-    const navigate = useNavigate()
     const [pedidos, setPedidos] = useState<any[]>([])
     const [loading, setLoading] = useState(true)
-    const [error, setError] = useState<string | null>(null)
     const [expandedPedido, setExpandedPedido] = useState<string | null>(null)
     const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false)
     const [selectedPedido, setSelectedPedido] = useState<any>(null)
@@ -57,7 +49,7 @@ export function OrdersPage() {
             const data = await pedidoService.getPedidosGestion(empresa!.id, filterDate)
             setPedidos(data)
         } catch (err: any) {
-            setError(err.message)
+            console.error(err.message)
         } finally {
             setLoading(false)
         }
