@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { facturacionService } from '../services/facturacionService'
 import { formatCurrency, cn } from '../lib/utils'
 import {
@@ -12,6 +12,8 @@ import {
     Trash2
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { useReactToPrint } from 'react-to-print'
+import { InvoiceTicketPOS } from './InvoiceTicketPOS'
 
 interface BillingModalProps {
     isOpen: boolean
@@ -35,6 +37,27 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
         direccion: '',
         telefono: ''
     })
+
+    const [facturaFinal, setFacturaFinal] = useState<any>(null)
+    const printRef = useRef<HTMLDivElement>(null)
+
+    const handlePrint = useReactToPrint({
+        contentRef: printRef,
+        documentTitle: `Factura_${facturaFinal?.secuencial}`,
+    })
+
+    // Efecto para imprimir cuando la factura final esté lista
+    useEffect(() => {
+        if (facturaFinal) {
+            handlePrint()
+            // Resetear para futuras facturas en la misma sesión del modal
+            const timer = setTimeout(() => {
+                onSuccess(facturaFinal)
+                setFacturaFinal(null)
+            }, 500)
+            return () => clearTimeout(timer)
+        }
+    }, [facturaFinal])
 
     useEffect(() => {
         if (isOpen && empresa?.id) {
@@ -124,7 +147,9 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
                 caja_sesion_id: cajaSesion.id
             })
 
-            onSuccess(factura)
+            // Obtener el comprobante completo con relaciones para imprimir
+            const facturaCompleta = await facturacionService.getComprobanteCompleto(factura.id)
+            setFacturaFinal(facturaCompleta)
         } catch (error: any) {
             alert('Error al facturar: ' + error.message)
         } finally {
@@ -394,6 +419,11 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
                         </button>
                     </div>
                 </div>
+            </div>
+
+            {/* Componente Oculto para Impresión POS */}
+            <div className="hidden">
+                <InvoiceTicketPOS ref={printRef} factura={facturaFinal} />
             </div>
         </div>
     )

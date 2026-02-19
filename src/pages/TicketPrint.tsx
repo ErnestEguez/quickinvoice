@@ -45,9 +45,14 @@ export function TicketPrint() {
             {/* Ticket 80mm */}
             <div className="mx-auto bg-white p-[5mm] w-[80mm] font-mono text-[10px] leading-tight text-black print:p-0 print:shadow-none">
                 {/* Header Logos */}
-                <div className="flex justify-between items-start mb-4">
-                    <img src="/logos/provider_logo.png" className="w-8 h-8 grayscale opacity-20" alt="Provider" />
-                    <img src="/logos/business_logo.png" className="w-16 h-16 object-contain" alt="Business" />
+                <div className="flex justify-center mb-4">
+                    {factura.empresas?.logo_url ? (
+                        <img src={factura.empresas.logo_url} className="w-20 h-20 object-contain" alt="Business" />
+                    ) : (
+                        <div className="w-16 h-16 flex items-center justify-center bg-slate-100 rounded text-xl font-bold">
+                            {factura.empresas?.nombre?.[0]}
+                        </div>
+                    )}
                 </div>
 
                 <div className="text-center space-y-1 mb-4">
