@@ -72,16 +72,16 @@ export function InvoicePrint() {
             <div className="max-w-4xl mx-auto bg-white shadow-2xl rounded-xl p-8 md:p-12 print:shadow-none print:rounded-none print:p-0">
                 {/* Header Section */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 border-b-2 border-slate-100 pb-8 relative">
-                    {/* Provider Logo (Fixed Left) */}
-                    <img
-                        src="/logos/provider_logo.png"
-                        alt="Billennium Sentinel"
-                        className="absolute -top-4 -left-4 w-12 h-12 grayscale opacity-30 print:opacity-10"
-                    />
 
                     <div className="space-y-4">
                         <div className="w-24 h-24 bg-white rounded-2xl flex items-center justify-center overflow-hidden border border-slate-100 p-2">
-                            <img src="/logos/business_logo.png" alt="Logo Negocio" className="w-full h-full object-contain" />
+                            {factura.empresas?.logo_url ? (
+                                <img src={factura.empresas.logo_url} alt="Logo Empresa" className="w-full h-full object-contain" />
+                            ) : (
+                                <div className="text-primary-600 font-black text-2xl">
+                                    {factura.empresas?.nombre?.[0]}
+                                </div>
+                            )}
                         </div>
                         <div>
                             <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">{factura.empresas?.nombre}</h1>

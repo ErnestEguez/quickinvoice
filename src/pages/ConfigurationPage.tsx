@@ -20,7 +20,8 @@ import {
     Utensils,
     RefreshCcw,
     X,
-    ArrowLeft
+    ArrowLeft,
+    Bomb
 } from 'lucide-react'
 import { cn } from '../lib/utils'
 
@@ -309,6 +310,33 @@ export function ConfigurationPage() {
             loadData()
         } catch (error: any) {
             alert(`Error al eliminar mesa: ${error.message}`)
+        }
+    }
+
+    async function handleNuclearReset(id: string, nombre: string) {
+        if (!confirm(`⚠️ ALERTA NUCLEAR ⚠️\n\n¿Estás seguro de borrar TODO el movimiento transaccional de "${nombre}"?\n\nEsto eliminará pedidos, facturas, kardex e inventario de prueba. Esta acción es IRREVERSIBLE.`)) return
+
+        const confirm2 = prompt(`Para confirmar, escribe el nombre de la empresa: ${nombre}`)
+        if (confirm2 !== nombre) {
+            alert('Confirmación fallida. El nombre no coincide.')
+            return
+        }
+
+        try {
+            setSaving(true)
+            const { data, error } = await supabase.rpc('reset_empresa_transaccional', { p_empresa_id: id })
+
+            if (error) throw error
+            if (data?.success) {
+                alert(data.message)
+                loadData()
+            } else {
+                alert(`Error: ${data?.error || 'Desconocido'}`)
+            }
+        } catch (error: any) {
+            alert(`Error al resetear: ${error.message}`)
+        } finally {
+            setSaving(false)
         }
     }
 
@@ -744,6 +772,13 @@ export function ConfigurationPage() {
                                                         <td className="px-6 py-4 text-right">
                                                             <div className="flex items-center justify-end gap-2">
                                                                 <button
+                                                                    onClick={() => handleNuclearReset(emp.id, emp.nombre)}
+                                                                    className="p-2 hover:bg-amber-50 rounded-lg text-slate-400 hover:text-amber-600 transition-colors"
+                                                                    title="Reset Nuclear (Borrar Pruebas)"
+                                                                >
+                                                                    <Bomb className="w-4 h-4" />
+                                                                </button>
+                                                                <button
                                                                     onClick={() => {
                                                                         setEditingEmpresa(emp)
                                                                         setIsEmpresaModalOpen(true)
@@ -916,7 +951,6 @@ export function ConfigurationPage() {
                                 </div>
 
                                 <div>
-                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Estado</label>
                                     <select
                                         className="w-full px-4 py-3 rounded-xl border mt-1 bg-white"
                                         value={editingEmpresa?.activo === false ? 'inactivo' : 'activo'}
@@ -925,6 +959,25 @@ export function ConfigurationPage() {
                                         <option value="activo">Activo</option>
                                         <option value="inactivo">No Activo</option>
                                     </select>
+                                </div>
+
+                                <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
+                                    <div>
+                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Funciones Extra</label>
+                                        <span className="text-sm font-bold text-slate-700">Dividir Cuentas</span>
+                                    </div>
+                                    <button
+                                        onClick={() => setEditingEmpresa({ ...editingEmpresa, habilitar_division_cuenta: !editingEmpresa?.habilitar_division_cuenta })}
+                                        className={cn(
+                                            "w-12 h-6 rounded-full transition-colors relative",
+                                            editingEmpresa?.habilitar_division_cuenta ? "bg-primary-600" : "bg-slate-300"
+                                        )}
+                                    >
+                                        <div className={cn(
+                                            "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
+                                            editingEmpresa?.habilitar_division_cuenta ? "left-7" : "left-1"
+                                        )} />
+                                    </button>
                                 </div>
 
                                 <div>

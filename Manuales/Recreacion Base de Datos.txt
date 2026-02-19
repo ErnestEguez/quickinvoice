@@ -1,13 +1,12 @@
+
 -- =====================================================
 -- RECREACIÓN COMPLETA DE BASE DE DATOS (SAAS RESTAURANTE)
 -- VERSIÓN ACTUALIZADA: INCLUYE POLÍTICAS RLS V7 Y LIMPIEZA PREVIA
+-- 17 Febrero 2026 
 -- =====================================================
--- Lunes 9 de Febrero 2026 10:32        Solicitado Antes de Cambio de FrontEnd para meseros
 -- 1. EXTENSIONES
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 -- 2. CREACIÓN DE TABLAS (SI NO EXISTEN)
-
 -- Empresas (SaaS Tenants)
 CREATE TABLE IF NOT EXISTS public.empresas (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -18,7 +17,6 @@ CREATE TABLE IF NOT EXISTS public.empresas (
     config_sri JSONB DEFAULT '{}',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
-
 -- Perfiles de Usuario (Auth Link)
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users ON DELETE CASCADE,
@@ -32,7 +30,6 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     motivo_baja TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
-
 -- Categorías de Productos
 CREATE TABLE IF NOT EXISTS public.categorias (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -41,7 +38,6 @@ CREATE TABLE IF NOT EXISTS public.categorias (
     tipo TEXT DEFAULT 'restaurante', 
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
-
 -- Productos
 CREATE TABLE IF NOT EXISTS public.productos (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -56,7 +52,6 @@ CREATE TABLE IF NOT EXISTS public.productos (
     activo BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
-
 -- Mesas
 CREATE TABLE IF NOT EXISTS public.mesas (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -66,7 +61,6 @@ CREATE TABLE IF NOT EXISTS public.mesas (
     estado TEXT DEFAULT 'libre' CHECK (estado IN ('libre', 'ocupada', 'reservada', 'atendida')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
-
 -- Clientes
 CREATE TABLE IF NOT EXISTS public.clientes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -79,7 +73,6 @@ CREATE TABLE IF NOT EXISTS public.clientes (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
     UNIQUE(empresa_id, identificacion)
 );
-
 -- Pedidos (Cabecera)
 CREATE TABLE IF NOT EXISTS public.pedidos (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -90,7 +83,6 @@ CREATE TABLE IF NOT EXISTS public.pedidos (
     total DECIMAL(12,2) DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
-
 -- Pedidos (Detalle)
 CREATE TABLE IF NOT EXISTS public.pedido_detalles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -102,7 +94,6 @@ CREATE TABLE IF NOT EXISTS public.pedido_detalles (
     notas TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
-
 -- Comprobantes / Facturas (Cabecera)
 CREATE TABLE IF NOT EXISTS public.comprobantes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -120,7 +111,6 @@ CREATE TABLE IF NOT EXISTS public.comprobantes (
     sri_utilizacion_sistema_financiero BOOLEAN DEFAULT false,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
-
 -- Comprobante (Detalle - Snapshot para historial)
 CREATE TABLE IF NOT EXISTS public.comprobante_detalles (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -134,7 +124,6 @@ CREATE TABLE IF NOT EXISTS public.comprobante_detalles (
     iva_valor DECIMAL(12,2),
     total DECIMAL(12,2)
 );
-
 -- Comprobante (Pagos)
 CREATE TABLE IF NOT EXISTS public.comprobante_pagos (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -143,7 +132,6 @@ CREATE TABLE IF NOT EXISTS public.comprobante_pagos (
     valor DECIMAL(12,2) NOT NULL,
     referencia TEXT
 );
-
 -- Reservas
 CREATE TABLE IF NOT EXISTS public.reservas (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -155,7 +143,6 @@ CREATE TABLE IF NOT EXISTS public.reservas (
     estado TEXT DEFAULT 'pendiente' CHECK (estado IN ('pendiente', 'completada', 'cancelada')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
-
 -- Proveedores
 CREATE TABLE IF NOT EXISTS public.proveedores (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -169,7 +156,6 @@ CREATE TABLE IF NOT EXISTS public.proveedores (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
-
 -- Ingresos de Stock (Cabecera)
 CREATE TABLE IF NOT EXISTS public.ingresos_stock (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -182,7 +168,6 @@ CREATE TABLE IF NOT EXISTS public.ingresos_stock (
     created_by UUID REFERENCES auth.users,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
-
 -- Detalles Ingreso Stock
 CREATE TABLE IF NOT EXISTS public.detalle_ingresos_stock (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -192,7 +177,6 @@ CREATE TABLE IF NOT EXISTS public.detalle_ingresos_stock (
     costo_unitario DECIMAL(12,2) NOT NULL,
     subtotal DECIMAL(12,2)
 );
-
 -- Kardex (Movimientos de Inventario)
 CREATE TABLE IF NOT EXISTS public.kardex (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -208,10 +192,8 @@ CREATE TABLE IF NOT EXISTS public.kardex (
     saldo_costo_promedio DECIMAL(12,2),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
-
 -- 3. FUNCIONES DE SEGURIDAD (SECURITY DEFINER)
 -- Estas evitan la recursión infinita en las políticas de RLS
-
 CREATE OR REPLACE FUNCTION public.is_platform_admin()
 RETURNS BOOLEAN
 LANGUAGE plpgsql
@@ -225,7 +207,6 @@ BEGIN
   );
 END;
 $$;
-
 CREATE OR REPLACE FUNCTION public.is_oficina()
 RETURNS BOOLEAN
 LANGUAGE plpgsql
@@ -239,7 +220,6 @@ BEGIN
   );
 END;
 $$;
-
 CREATE OR REPLACE FUNCTION public.get_my_empresa_id()
 RETURNS UUID
 LANGUAGE plpgsql
@@ -250,9 +230,7 @@ BEGIN
   RETURN (SELECT empresa_id FROM public.profiles WHERE id = auth.uid());
 END;
 $$;
-
 -- 4. POLÍTICAS RLS (VERSIÓN DEFINITIVA V7)
-
 -- Activar RLS en todas las tablas
 DO $$ 
 DECLARE 
@@ -263,7 +241,6 @@ BEGIN
         EXECUTE format('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY;', tbl);
     END LOOP;
 END $$;
-
 -- LIMPIEZA PREVIA DE POLÍTICAS (Para evitar duplicados)
 DO $$ 
 DECLARE 
@@ -274,7 +251,6 @@ BEGIN
         EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I;', pol.policyname, pol.tablename);
     END LOOP;
 END $$;
-
 -- 4.1 POLÍTICAS PARA PROFILES
 -- SELECT: Ver propio perfil OR admin OR oficina viendo a su staff
 CREATE POLICY "profiles_select" ON public.profiles FOR SELECT TO authenticated
@@ -283,7 +259,6 @@ USING (
   OR public.is_platform_admin() 
   OR (empresa_id = public.get_my_empresa_id() AND public.is_oficina())
 );
-
 -- INSERT: Registro propio OR admin creando usuarios OR oficina creando meseros
 CREATE POLICY "profiles_insert" ON public.profiles FOR INSERT TO authenticated
 WITH CHECK (
@@ -291,7 +266,6 @@ WITH CHECK (
   OR public.is_platform_admin() 
   OR (empresa_id = public.get_my_empresa_id() AND public.is_oficina())
 );
-
 -- UPDATE: Propio perfil OR admin OR oficina gestionando staff
 CREATE POLICY "profiles_update" ON public.profiles FOR UPDATE TO authenticated
 USING (
@@ -299,14 +273,12 @@ USING (
   OR public.is_platform_admin() 
   OR (empresa_id = public.get_my_empresa_id() AND public.is_oficina())
 );
-
 -- DELETE: Solo admin o oficina
 CREATE POLICY "profiles_delete" ON public.profiles FOR DELETE TO authenticated
 USING (
   public.is_platform_admin() 
   OR (empresa_id = public.get_my_empresa_id() AND public.is_oficina())
 );
-
 -- 4.2 POLÍTICAS PARA EMPRESAS
 -- SELECT: Admin ve todas, Usuarios ven su propia empresa
 CREATE POLICY "empresas_select" ON public.empresas FOR SELECT TO authenticated
@@ -314,22 +286,18 @@ USING (
   public.is_platform_admin() 
   OR id = public.get_my_empresa_id()
 );
-
 -- INSERT: Solo admin
 CREATE POLICY "empresas_insert" ON public.empresas FOR INSERT TO authenticated
 WITH CHECK (public.is_platform_admin());
-
 -- UPDATE: Admin o Oficina (para configurar su propia empresa)
 CREATE POLICY "empresas_update" ON public.empresas FOR UPDATE TO authenticated
 USING (
   public.is_platform_admin() 
   OR (id = public.get_my_empresa_id() AND public.is_oficina())
 );
-
 -- DELETE: Solo admin
 CREATE POLICY "empresas_delete" ON public.empresas FOR DELETE TO authenticated
 USING (public.is_platform_admin());
-
 -- 4.3 POLÍTICAS GENÉRICAS PARA EL RESTO DE TABLAS
 -- Se aplican a: productos, pedidos, mesas, clientes, etc.
 -- Regla: Admin ve todo, Usuario ve solo data de su empresa_id
@@ -343,20 +311,58 @@ BEGIN
         EXECUTE format('CREATE POLICY "%I_all_policy" ON public.%I FOR ALL TO authenticated USING (public.is_platform_admin() OR empresa_id = public.get_my_empresa_id()) WITH CHECK (public.is_platform_admin() OR empresa_id = public.get_my_empresa_id());', tbl, tbl);
     END LOOP;
 END $$;
-
 -- 5. DATOS DE INICIALIZACIÓN
-
 -- Empresa Billennium (Si no existe, se crea)
 INSERT INTO public.empresas (id, ruc, nombre, direccion, telefono)
 VALUES ('00000000-0000-0000-0000-000000000001', '1790000000001', 'Billennium Restaurantes', 'Quito, Ecuador', '0999999999')
 ON CONFLICT (ruc) DO UPDATE SET nombre = EXCLUDED.nombre;
-
 -- GRANTS
 GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated;
 GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
-
 -- RECARGAR SCHEMA
 NOTIFY pgrst, 'reload schema';
-
 COMMIT;
+-- =====================================================
+-- 6. SEED DATA (DATOS DE PRUEBA)
+-- =====================================================
+-- Asegurar que estamos usando la empresa por defecto
+DO $$
+DECLARE
+    empresa_uuid UUID := '00000000-0000-0000-0000-000000000001';
+    cat_bebidas UUID;
+    cat_platos UUID;
+BEGIN
+    -- 6.1 Categorías
+    INSERT INTO public.categorias (empresa_id, nombre, tipo) VALUES 
+    (empresa_uuid, 'Bebidas', 'restaurante'),
+    (empresa_uuid, 'Platos Fuertes', 'restaurante'),
+    (empresa_uuid, 'Entradas', 'restaurante')
+    ON CONFLICT DO NOTHING;
+    SELECT id INTO cat_bebidas FROM public.categorias WHERE nombre = 'Bebidas' AND empresa_id = empresa_uuid LIMIT 1;
+    SELECT id INTO cat_platos FROM public.categorias WHERE nombre = 'Platos Fuertes' AND empresa_id = empresa_uuid LIMIT 1;
+    -- 6.2 Productos
+    IF cat_bebidas IS NOT NULL THEN
+        INSERT INTO public.productos (empresa_id, categoria_id, nombre, precio_venta, costo_promedio, stock, maneja_stock, ivar_porcentaje) VALUES
+        (empresa_uuid, cat_bebidas, 'Coca Cola Personal', 1.50, 0.80, 100, true, 15),
+        (empresa_uuid, cat_bebidas, 'Jugo Natural', 2.00, 0.50, 50, true, 0),
+        (empresa_uuid, cat_bebidas, 'Cerveza Club', 3.50, 1.20, 100, true, 15);
+    END IF;
+    IF cat_platos IS NOT NULL THEN
+        INSERT INTO public.productos (empresa_id, categoria_id, nombre, precio_venta, costo_promedio, stock, maneja_stock, ivar_porcentaje) VALUES
+        (empresa_uuid, cat_platos, 'Hamburguesa Clásica', 5.50, 2.50, 20, true, 15),
+        (empresa_uuid, cat_platos, 'Lomo Fino a la Parrilla', 12.00, 6.00, 15, true, 15),
+        (empresa_uuid, cat_platos, 'Pollo Asado (Cuarto)', 4.50, 2.00, 30, true, 0);
+    END IF;
+    -- 6.3 Mesas
+    INSERT INTO public.mesas (empresa_id, numero, capacidad, estado) VALUES
+    (empresa_uuid, 'Mesa 1', 4, 'libre'),
+    (empresa_uuid, 'Mesa 2', 2, 'libre'),
+    (empresa_uuid, 'Mesa 3', 6, 'libre'),
+    (empresa_uuid, 'Mesa 4', 4, 'libre'),
+    (empresa_uuid, 'Mesa 5', 8, 'libre');
+    -- 6.4 Cliente Consumidor Final
+    INSERT INTO public.clientes (empresa_id, identificacion, nombre, direccion, telefono, email) VALUES
+    (empresa_uuid, '9999999999999', 'CONSUMIDOR FINAL', 'S/D', '9999999999', 'cf@consumidor.com')
+    ON CONFLICT (empresa_id, identificacion) DO NOTHING;
+END $$;

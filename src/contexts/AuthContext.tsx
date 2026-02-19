@@ -14,6 +14,7 @@ interface Empresa {
     nombre: string
     ruc: string
     logo_url?: string | null
+    habilitar_division_cuenta?: boolean
 }
 
 interface AuthContextType {
@@ -22,6 +23,7 @@ interface AuthContextType {
     empresa: Empresa | null
     loading: boolean
     signOut: () => Promise<void>
+    cajaSesion: any | null
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -32,6 +34,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const [empresa, setEmpresa] = useState<Empresa | null>(null)
     const [loading, setLoading] = useState(true)
     const isMounted = React.useRef(true)
+
+    const [cajaSesion, setCajaSesion] = useState<any | null>(null);
+    const [cajaBloqueada, setCajaBloqueada] = useState<string | null>(null); // Nombre del usuario que bloquea
 
     useEffect(() => {
         isMounted.current = true;
@@ -77,6 +82,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                 setUser(null);
                 setProfile(null);
                 setEmpresa(null);
+                setCajaSesion(null);
+                setCajaBloqueada(null);
                 setLoading(false);
             } else if (_event === 'TOKEN_REFRESHED') {
                 console.log('🔄 Token Refreshed');
@@ -104,6 +111,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Avoid fetching if we already have the profile for this user
         if (profile?.id === userId && empresa) {
             console.log('⚡ Profile already loaded for', userId)
+            // Aun asi validamos la caja por si cambio estado
+            await validarCaja(userId, empresa.id, profile.rol);
             setLoading(false)
             return
         }
@@ -143,6 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
                 if (!empresaError && empresaData) {
                     setEmpresa(empresaData)
+                    await validarCaja(userId, data.empresa_id, data.rol);
                 } else {
                     console.error('❌ Empresa Fetch Error:', empresaError)
                     setEmpresa(null)
@@ -156,6 +166,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             // El loading sí debe terminar
         } finally {
             if (isMounted.current) setLoading(false)
+        }
+    }
+
+    async function validarCaja(userId: string, empresaId: string, userRol: string) {
+        try {
+            const esRolOficina = userRol === 'oficina' || userRol === 'admin_plataforma';
+            const esRolOperativo = userRol === 'mesero' || userRol === 'cocina';
+
+            // Buscar caja abierta en la empresa
+            const { data: cajaAbierta, error } = await supabase
+                .from('caja_sesiones')
+                .select('*')
+                .eq('empresa_id', empresaId)
+                .eq('estado', 'abierta')
+                .maybeSingle();
+
+            if (error) throw error;
+
+            if (cajaAbierta) {
+                if (cajaAbierta.usuario_id === userId) {
+                    console.log('✅ Caja abierta propia encontrada');
+                    setCajaSesion(cajaAbierta);
+                    setCajaBloqueada(null);
+                } else if (esRolOficina) {
+                    // Oficina ve caja de otro usuario: la toma como referencia y NO se bloquea
+                    console.log('ℹ️ Caja abierta por otro usuario, rol oficina puede continuar');
+                    setCajaSesion(cajaAbierta);
+                    setCajaBloqueada(null);
+                } else {
+                    // Mesero/cocina: hay una caja abierta (de oficina), pueden operar
+                    console.log('✅ Mesero/cocina: caja de oficina disponible');
+                    setCajaSesion(cajaAbierta);
+                    setCajaBloqueada(null);
+                }
+            } else {
+                // No hay ninguna caja abierta
+                if (esRolOficina) {
+                    // Solo oficina abre la caja automáticamente
+                    console.log('✨ Oficina: abriendo nueva caja para:', userId);
+                    const { data: nuevaCaja, error: errorInsert } = await supabase
+                        .from('caja_sesiones')
+                        .insert({
+                            empresa_id: empresaId,
+                            usuario_id: userId,
+                            base_inicial: 0,
+                            estado: 'abierta',
+                            fecha_apertura: new Date().toISOString()
+                        })
+                        .select()
+                        .single();
+
+                    if (errorInsert) {
+                        console.error('Error abriendo caja:', errorInsert);
+                    } else {
+                        setCajaSesion(nuevaCaja);
+                        setCajaBloqueada(null);
+                    }
+                } else if (esRolOperativo) {
+                    // Mesero/cocina NO puede abrir caja. Debe esperar que oficina la abra.
+                    console.warn('⛔ Mesero/cocina: no hay caja abierta por oficina');
+                    setCajaSesion(null);
+                    setCajaBloqueada('SIN_CAJA');
+                }
+            }
+        } catch (err) {
+            console.error('Error validando caja:', err);
         }
     }
 
@@ -207,14 +283,57 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         )
     }
 
+    // PANTALLA DE ESPERA DE CAJA (para meseros/cocina cuando no hay caja abierta)
+    if (cajaBloqueada && user) {
+        const sinCaja = cajaBloqueada === 'SIN_CAJA';
+        return (
+            <div className="min-h-screen flex flex-col items-center justify-center bg-slate-100 p-6 text-center">
+                <div className="bg-white p-8 rounded-2xl shadow-xl max-w-md w-full">
+                    <div className={`w-16 h-16 ${sinCaja ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'} rounded-full flex items-center justify-center mx-auto mb-6`}>
+                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                        </svg>
+                    </div>
+                    {sinCaja ? (
+                        <>
+                            <h2 className="text-2xl font-bold text-slate-800 mb-2">Caja no iniciada</h2>
+                            <p className="text-slate-600 mb-6">
+                                No hay una caja abierta todavía.<br /><br />
+                                <strong>Un usuario de Oficina debe iniciar la caja</strong> antes de que puedas operar como mesero.
+                                <br /><br />
+                                Por favor solicita al administrador que inicie sesión primero.
+                            </p>
+                        </>
+                    ) : (
+                        <>
+                            <h2 className="text-2xl font-bold text-slate-800 mb-2">Caja Cerrada para Ti</h2>
+                            <p className="text-slate-600 mb-6">
+                                La caja está actualmente abierta por <strong>{cajaBloqueada}</strong>.
+                                <br /><br />
+                                No puedes acceder al sistema hasta que el usuario anterior cierre su turno.
+                            </p>
+                        </>
+                    )}
+                    <button
+                        onClick={() => signOut()}
+                        className="w-full bg-slate-800 hover:bg-slate-900 text-white font-medium py-3 px-4 rounded-xl transition-colors"
+                    >
+                        Cerrar Sesión
+                    </button>
+                </div>
+            </div>
+        )
+    }
+
     return (
         <AuthContext.Provider value={{
             user,
             profile,
             empresa,
             loading,
-            signOut
-        }}>
+            signOut,
+            cajaSesion // Exponemos la sesión
+        } as any}>
             {children}
         </AuthContext.Provider>
     )

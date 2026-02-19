@@ -1,12 +1,12 @@
--- Función RPC para crear un pedido completo de forma atómica
--- Esto reemplaza las 3 llamadas separadas desde el frontend y garantiza integridad de datos.
-
-CREATE OR REPLACE FUNCTION crear_pedido_completo(
+CREATE OR REPLACE FUNCTION public.crear_pedido_completo(
     p_mesa_id UUID,
     p_mesero_id UUID,
     p_empresa_id UUID,
     p_total NUMERIC,
-    p_detalles JSONB
+    p_detalles JSONB,
+    p_nombre_cliente TEXT DEFAULT NULL,
+    p_identificacion_cliente TEXT DEFAULT NULL,
+    p_email_cliente TEXT DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -18,13 +18,30 @@ DECLARE
     v_detalle JSONB;
     v_pedido_result JSONB;
 BEGIN
-    -- 1. Insertar la cabecera del pedido
-    INSERT INTO pedidos (mesa_id, mesero_id, empresa_id, total, estado)
-    VALUES (p_mesa_id, p_mesero_id, p_empresa_id, p_total, 'pendiente')
+    -- 1. Insertar la cabecera del pedido con los nuevos campos
+    INSERT INTO pedidos (
+        mesa_id, 
+        mesero_id, 
+        empresa_id, 
+        total, 
+        estado,
+        nombre_cliente_mesa,
+        identificacion_cliente_mesa,
+        email_cliente_mesa
+    )
+    VALUES (
+        p_mesa_id, 
+        p_mesero_id, 
+        p_empresa_id, 
+        p_total, 
+        'pendiente',
+        p_nombre_cliente,
+        p_identificacion_cliente,
+        p_email_cliente
+    )
     RETURNING id INTO v_pedido_id;
 
     -- 2. Insertar los detalles
-    -- Iteramos sobre el array de JSONB
     FOR v_detalle IN SELECT * FROM jsonb_array_elements(p_detalles)
     LOOP
         INSERT INTO pedido_detalles (
@@ -37,7 +54,7 @@ BEGIN
         VALUES (
             v_pedido_id,
             (v_detalle->>'producto_id')::UUID,
-            (v_detalle->>'cantidad')::INTEGER,
+            (v_detalle->>'cantidad')::NUMERIC,
             (v_detalle->>'precio_unitario')::NUMERIC,
             (v_detalle->>'subtotal')::NUMERIC
         );
@@ -60,8 +77,11 @@ BEGIN
     RETURN v_pedido_result;
 
 EXCEPTION WHEN OTHERS THEN
-    -- Si algo falla, la transacción se revierte automáticamente (ROLLBACK)
-    -- pero podemos relanzar el error para que el frontend lo sepa
     RAISE;
 END;
 $$;
+
+-- Refrescar permisos
+GRANT EXECUTE ON FUNCTION public.crear_pedido_completo(UUID, UUID, UUID, NUMERIC, JSONB, TEXT, TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.crear_pedido_completo(UUID, UUID, UUID, NUMERIC, JSONB, TEXT, TEXT, TEXT) TO service_role;
+NOTIFY pgrst, 'reload schema';

@@ -6,8 +6,10 @@ import {
     Trash2,
     ChevronLeft,
     Utensils,
-    X,
-    CheckCircle2
+    CheckCircle2,
+    Split,
+    CreditCard,
+    X
 } from 'lucide-react'
 import { formatCurrency } from '../../lib/utils'
 import type { Producto, Categoria } from '../../services/productoService'
@@ -27,8 +29,14 @@ interface WaiterOrderTakeMobileProps {
     updateCantidad: (id: string, delta: number) => void
     onConfirm: () => void
     onBack: () => void
+    onSplit?: () => void
+    onBill?: () => void
     submitting: boolean
     existingTotal?: number
+    existingPedido?: any
+    habilitarDivisionCuenta?: boolean
+    canBill?: boolean
+    hasExistingPedido?: boolean
 }
 
 export function WaiterOrderTakeMobile({
@@ -41,8 +49,14 @@ export function WaiterOrderTakeMobile({
     updateCantidad,
     onConfirm,
     onBack,
+    onSplit,
+    onBill,
     submitting,
-    existingTotal = 0
+    existingTotal = 0,
+    existingPedido,
+    habilitarDivisionCuenta,
+    canBill,
+    hasExistingPedido
 }: WaiterOrderTakeMobileProps) {
     const [activeCategory, setActiveCategory] = useState<string>('all')
     const [searchTerm, setSearchTerm] = useState('')
@@ -175,20 +189,28 @@ export function WaiterOrderTakeMobile({
             </div>
 
             {/* 4. Sticky Cart Footer */}
-            {totalItems > 0 && (
+            {(totalItems > 0 || hasExistingPedido) && (
                 <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-slate-200 shadow-[0_-4px_20px_-5px_rgba(0,0,0,0.1)] z-30">
                     <button
                         onClick={() => setIsCartOpen(true)}
-                        className="w-full bg-primary-600 text-white rounded-2xl p-4 flex items-center justify-between shadow-primary-200 shadow-lg active:scale-[0.98] transition-all"
+                        className={cn(
+                            "w-full rounded-2xl p-4 flex items-center justify-between shadow-lg active:scale-[0.98] transition-all",
+                            totalItems > 0 ? "bg-primary-600 shadow-primary-200 text-white" : "bg-slate-800 shadow-slate-200 text-white"
+                        )}
                     >
                         <div className="flex items-center gap-3">
-                            <div className="bg-primary-800 bg-opacity-30 px-3 py-1 rounded-lg font-bold text-sm">
-                                {totalItems} ítems
+                            <div className={cn(
+                                "bg-opacity-30 px-3 py-1 rounded-lg font-bold text-sm",
+                                totalItems > 0 ? "bg-primary-800" : "bg-slate-600"
+                            )}>
+                                {totalItems > 0 ? `${totalItems} ítems` : 'Ver Cuenta'}
                             </div>
-                            <span className="font-medium text-primary-100">Ver pedido</span>
+                            <span className="font-medium text-primary-100">
+                                {totalItems > 0 ? 'Ver pedido' : 'Pedido de la mesa'}
+                            </span>
                         </div>
                         <div className="font-black text-lg">
-                            {formatCurrency(cartTotal)}
+                            {formatCurrency(cartTotal + existingTotal)}
                         </div>
                     </button>
                 </div>
@@ -206,28 +228,64 @@ export function WaiterOrderTakeMobile({
                             </button>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto space-y-4 mb-6">
-                            {cart.map(item => (
-                                <div key={item.id} className="flex justify-between items-start border-b border-slate-50 pb-4">
-                                    <div className="flex gap-3">
-                                        <div className="bg-slate-100 p-2 rounded-lg h-12 w-12 flex items-center justify-center">
-                                            <span className="font-bold text-slate-500">x{item.cantidad}</span>
+                        <div className="flex-1 overflow-y-auto space-y-4 mb-6 pr-2">
+                            {/* New items in cart */}
+                            {cart.length > 0 && (
+                                <div className="space-y-4">
+                                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Nuevos items</h3>
+                                    {cart.map(item => (
+                                        <div key={item.id} className="flex justify-between items-start border-b border-slate-50 pb-4">
+                                            <div className="flex gap-3">
+                                                <div className="bg-primary-50 p-2 rounded-lg h-12 w-12 flex items-center justify-center">
+                                                    <span className="font-bold text-primary-600 text-sm">x{item.cantidad}</span>
+                                                </div>
+                                                <div>
+                                                    <h4 className="font-bold text-slate-900 leading-tight">{item.nombre}</h4>
+                                                    <p className="text-sm text-slate-500 font-medium">{formatCurrency(item.precio_venta * item.cantidad)}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <div className="flex items-center bg-slate-100 rounded-lg p-1">
+                                                    <button onClick={() => updateCantidad(item.id, -1)} className="p-1 hover:bg-white rounded transition-colors">
+                                                        <Minus className="w-3 h-3 text-slate-500" />
+                                                    </button>
+                                                    <button onClick={() => updateCantidad(item.id, 1)} className="p-1 hover:bg-white rounded transition-colors">
+                                                        <Plus className="w-3 h-3 text-slate-500" />
+                                                    </button>
+                                                </div>
+                                                <button onClick={() => removeFromCart(item.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <h4 className="font-bold text-slate-900">{item.nombre}</h4>
-                                            <p className="text-sm text-slate-500">{formatCurrency(item.precio_venta * item.cantidad)}</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <button onClick={() => updateCantidad(item.id, -1)} className="p-1 border rounded-lg">
-                                            <Minus className="w-4 h-4 text-slate-500" />
-                                        </button>
-                                        <button onClick={() => removeFromCart(item.id)} className="p-1 border rounded-lg border-red-100 bg-red-50 text-red-500">
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
+                                    ))}
+                                </div>
+                            )}
+
+                            {/* Existing items from previous commands */}
+                            {existingPedido?.pedido_detalles && existingPedido.pedido_detalles.length > 0 && (
+                                <div className="space-y-4 mt-6">
+                                    <h3 className="text-xs font-bold text-amber-600 uppercase tracking-wider">Ya ordenado</h3>
+                                    <div className="bg-amber-50 rounded-2xl p-4 space-y-3">
+                                        {existingPedido.pedido_detalles.map((detalle: any) => (
+                                            <div key={detalle.id} className="flex justify-between items-center text-sm">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-bold text-amber-700">x{detalle.cantidad}</span>
+                                                    <span className="text-amber-900 font-medium">{detalle.productos?.nombre}</span>
+                                                </div>
+                                                <span className="text-amber-700 font-bold">{formatCurrency(detalle.subtotal)}</span>
+                                            </div>
+                                        ))}
                                     </div>
                                 </div>
-                            ))}
+                            )}
+
+                            {cart.length === 0 && !hasExistingPedido && (
+                                <div className="text-center py-12">
+                                    <Utensils className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                                    <p className="text-slate-400 font-medium">No hay productos seleccionados</p>
+                                </div>
+                            )}
                         </div>
 
                         <div className="space-y-4">
@@ -246,19 +304,40 @@ export function WaiterOrderTakeMobile({
                                 <span>{formatCurrency(cartTotal + existingTotal)}</span>
                             </div>
 
-                            <button
-                                disabled={submitting}
-                                onClick={onConfirm}
-                                className="w-full bg-primary-600 text-white py-4 rounded-2xl font-bold text-lg shadow-xl shadow-primary-200 flex items-center justify-center gap-2"
-                            >
-                                {submitting ? (
-                                    'Enviando...'
-                                ) : (
-                                    <>
-                                        Confirmar a Cocina <CheckCircle2 className="w-6 h-6" />
-                                    </>
-                                )}
-                            </button>
+                            <div className="flex flex-col gap-3 pt-2">
+                                <div className="grid grid-cols-2 gap-3">
+                                    {habilitarDivisionCuenta && hasExistingPedido && (
+                                        <button
+                                            onClick={onSplit}
+                                            className="flex items-center justify-center gap-2 py-3 bg-slate-100 text-slate-700 rounded-xl font-bold text-sm hover:bg-slate-200 transition-colors"
+                                        >
+                                            <Split className="w-4 h-4" />
+                                            Dividir
+                                        </button>
+                                    )}
+                                    {canBill && (hasExistingPedido || cart.length > 0) && (
+                                        <button
+                                            onClick={onBill}
+                                            disabled={submitting}
+                                            className="flex items-center justify-center gap-2 py-3 bg-amber-100 text-amber-700 rounded-xl font-bold text-sm hover:bg-amber-200 transition-colors"
+                                        >
+                                            <CreditCard className="w-4 h-4" />
+                                            Facturar
+                                        </button>
+                                    )}
+                                </div>
+                                <button
+                                    disabled={submitting}
+                                    onClick={onConfirm}
+                                    className="w-full bg-primary-600 text-white py-4 rounded-2xl font-bold text-lg shadow-xl shadow-primary-200 flex items-center justify-center gap-2 active:scale-[0.98] transition-all"
+                                >
+                                    {submitting ? 'Enviando...' : (
+                                        <>
+                                            Confirmar a Cocina <CheckCircle2 className="w-6 h-6" />
+                                        </>
+                                    )}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

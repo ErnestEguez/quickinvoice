@@ -20,7 +20,7 @@ export interface PedidoDetalle {
 }
 
 export const pedidoService = {
-    async crearPedido(mesaId: string, meseroId: string, empresaId: string, items: any[], total: number) {
+    async crearPedido(mesaId: string, meseroId: string, empresaId: string, items: any[], total: number, clienteInfo?: { nombre?: string, identificacion?: string, email?: string }) {
         // Preparar los detalles para el RPC
         const detalles = items.map(item => ({
             producto_id: item.id,
@@ -35,7 +35,10 @@ export const pedidoService = {
             p_mesero_id: meseroId,
             p_empresa_id: empresaId,
             p_total: total,
-            p_detalles: detalles
+            p_detalles: detalles,
+            p_nombre_cliente: clienteInfo?.nombre || null,
+            p_identificacion_cliente: clienteInfo?.identificacion || null,
+            p_email_cliente: clienteInfo?.email || null
         })
 
         if (error) {
@@ -43,7 +46,8 @@ export const pedidoService = {
             throw error
         }
 
-        return data
+        // Retornar el pedido completo (con detalles) para que sea usable inmediatamente
+        return this.getPedidoById(data.id)
     },
 
     async getPedidosRecientes(limit = 5) {
@@ -59,6 +63,62 @@ export const pedidoService = {
             .gte('created_at', today.toISOString())
             .order('created_at', { ascending: false })
             .limit(limit)
+
+        if (error) throw error
+        return data
+    },
+
+    async getPedidos(empresaId: string, fecha: string) {
+        const start = new Date(fecha)
+        start.setUTCHours(0, 0, 0, 0)
+
+        const end = new Date(fecha)
+        end.setUTCHours(23, 59, 59, 999)
+
+        const { data, error } = await supabase
+            .from('pedidos')
+            .select(`
+                *,
+                mesas (numero),
+                pedido_detalles (
+                    *,
+                    productos (nombre)
+                )
+            `)
+            .eq('empresa_id', empresaId)
+            .neq('estado', 'facturado') // Excluir facturados por peticion del usuario
+            .gte('created_at', start.toISOString())
+            .lte('created_at', end.toISOString())
+            .order('created_at', { ascending: false })
+
+        if (error) throw error
+        return data
+    },
+
+    // Nueva función optimizada para Gestión (Cocina/Caja)
+    // Trae TODOS los pendientes (independiente de la fecha) + Facturados del día seleccionado
+    async getPedidosGestion(empresaId: string, fecha: string) {
+        const start = new Date(fecha)
+        start.setUTCHours(0, 0, 0, 0)
+
+        const end = new Date(fecha)
+        end.setUTCHours(23, 59, 59, 999)
+
+        const { data, error } = await supabase
+            .from('pedidos')
+            .select(`
+                *,
+                mesas (numero),
+                pedido_detalles (
+                    *,
+                    productos (nombre)
+                )
+            `)
+            .eq('empresa_id', empresaId)
+            // Lógica: (Estado != Facturado) OR (Created_at en rango)
+            // Esto asegura que pedidos de "ayer" que siguen abiertos se vean hoy.
+            .or(`estado.neq.facturado,and(created_at.gte.${start.toISOString()},created_at.lte.${end.toISOString()})`)
+            .order('created_at', { ascending: false })
 
         if (error) throw error
         return data
@@ -153,7 +213,7 @@ export const pedidoService = {
         return data
     },
 
-    async updateEstadoPedido(pedidoId: string, nuevoEstado: string) {
+    async actualizarEstado(pedidoId: string, nuevoEstado: string) {
         const { data, error } = await supabase
             .from('pedidos')
             .update({ estado: nuevoEstado })
@@ -181,9 +241,58 @@ export const pedidoService = {
             `)
             .eq('mesa_id', mesaId)
             .neq('estado', 'facturado')
-            .neq('estado', 'cancelado')  // Fix: Exclude cancelled orders
+            .neq('estado', 'cancelado')
             .order('created_at', { ascending: false })
+            .limit(1) // Asegurar que solo traiga uno para evitar error con .single() si hay multiples
             .maybeSingle()
+
+        if (error) throw error
+        return data
+    },
+
+    async getPedidosActivosMesa(mesaId: string) {
+        const { data, error } = await supabase
+            .from('pedidos')
+            .select(`
+                *,
+                pedido_detalles (
+                    *,
+                    productos (*)
+                )
+            `)
+            .eq('mesa_id', mesaId)
+            .neq('estado', 'facturado')
+            .neq('estado', 'cancelado')
+            .order('created_at', { ascending: true }) // Ordenar por creación para ver el original primero
+
+        if (error) throw error
+        return data
+    },
+
+    async dividirPedido(pedidoOriginalId: string, nuevosPedidos: any[], nombreOriginal?: string) {
+        // 1. Ejecutar RPC de división
+        const { data, error } = await supabase.rpc('dividir_pedido', {
+            p_pedido_original_id: pedidoOriginalId,
+            p_nuevos_pedidos: nuevosPedidos
+        })
+
+        if (error) throw error
+
+        // 2. Si se cambió el nombre del original, actualizarlo
+        if (nombreOriginal) {
+            await supabase
+                .from('pedidos')
+                .update({ nombre_cliente_mesa: nombreOriginal })
+                .eq('id', pedidoOriginalId)
+        }
+
+        return data
+    },
+
+    async revertirDivision(pedidoId: string) {
+        const { data, error } = await supabase.rpc('revertir_division_total', {
+            p_pedido_id: pedidoId
+        })
 
         if (error) throw error
         return data

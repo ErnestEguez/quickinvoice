@@ -360,3 +360,54 @@ GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
 NOTIFY pgrst, 'reload schema';
 
 COMMIT;
+
+-- =====================================================
+-- 6. SEED DATA (DATOS DE PRUEBA)
+-- =====================================================
+
+-- Asegurar que estamos usando la empresa por defecto
+DO $$
+DECLARE
+    empresa_uuid UUID := '00000000-0000-0000-0000-000000000001';
+    cat_bebidas UUID;
+    cat_platos UUID;
+BEGIN
+    -- 6.1 Categorías
+    INSERT INTO public.categorias (empresa_id, nombre, tipo) VALUES 
+    (empresa_uuid, 'Bebidas', 'restaurante'),
+    (empresa_uuid, 'Platos Fuertes', 'restaurante'),
+    (empresa_uuid, 'Entradas', 'restaurante')
+    ON CONFLICT DO NOTHING;
+
+    SELECT id INTO cat_bebidas FROM public.categorias WHERE nombre = 'Bebidas' AND empresa_id = empresa_uuid LIMIT 1;
+    SELECT id INTO cat_platos FROM public.categorias WHERE nombre = 'Platos Fuertes' AND empresa_id = empresa_uuid LIMIT 1;
+
+    -- 6.2 Productos
+    IF cat_bebidas IS NOT NULL THEN
+        INSERT INTO public.productos (empresa_id, categoria_id, nombre, precio_venta, costo_promedio, stock, maneja_stock, ivar_porcentaje) VALUES
+        (empresa_uuid, cat_bebidas, 'Coca Cola Personal', 1.50, 0.80, 100, true, 15),
+        (empresa_uuid, cat_bebidas, 'Jugo Natural', 2.00, 0.50, 50, true, 0),
+        (empresa_uuid, cat_bebidas, 'Cerveza Club', 3.50, 1.20, 100, true, 15);
+    END IF;
+
+    IF cat_platos IS NOT NULL THEN
+        INSERT INTO public.productos (empresa_id, categoria_id, nombre, precio_venta, costo_promedio, stock, maneja_stock, ivar_porcentaje) VALUES
+        (empresa_uuid, cat_platos, 'Hamburguesa Clásica', 5.50, 2.50, 20, true, 15),
+        (empresa_uuid, cat_platos, 'Lomo Fino a la Parrilla', 12.00, 6.00, 15, true, 15),
+        (empresa_uuid, cat_platos, 'Pollo Asado (Cuarto)', 4.50, 2.00, 30, true, 0);
+    END IF;
+
+    -- 6.3 Mesas
+    INSERT INTO public.mesas (empresa_id, numero, capacidad, estado) VALUES
+    (empresa_uuid, 'Mesa 1', 4, 'libre'),
+    (empresa_uuid, 'Mesa 2', 2, 'libre'),
+    (empresa_uuid, 'Mesa 3', 6, 'libre'),
+    (empresa_uuid, 'Mesa 4', 4, 'libre'),
+    (empresa_uuid, 'Mesa 5', 8, 'libre');
+
+    -- 6.4 Cliente Consumidor Final
+    INSERT INTO public.clientes (empresa_id, identificacion, nombre, direccion, telefono, email) VALUES
+    (empresa_uuid, '9999999999999', 'CONSUMIDOR FINAL', 'S/D', '9999999999', 'cf@consumidor.com')
+    ON CONFLICT (empresa_id, identificacion) DO NOTHING;
+
+END $$;

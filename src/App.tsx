@@ -18,6 +18,7 @@ import { ConfigurationPage } from './pages/ConfigurationPage'
 import { ProveedoresPage } from './pages/ProveedoresPage'
 import { InventarioPage } from './pages/InventarioPage'
 import { KardexPage } from './pages/KardexPage'
+import { CierresPage } from './pages/CierresPage'
 import { ProtectedRoute as RoleProtectedRoute } from './components/ProtectedRoute'
 
 // Componente para proteger rutas (Auth simple)
@@ -135,6 +136,16 @@ function App() {
                 <RoleProtectedRoute allowedRoles={['oficina', 'admin_plataforma']}>
                   <Layout>
                     <ConfigurationPage />
+                  </Layout>
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/cierres" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['oficina', 'admin_plataforma']}>
+                  <Layout>
+                    <CierresPage />
                   </Layout>
                 </RoleProtectedRoute>
               </ProtectedRoute>

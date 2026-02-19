@@ -58,22 +58,28 @@ function MesaCard({ mesa, proximaReserva, onClick, onReset, profile }: MesaCardP
                             <Users className="w-3 h-3" />
                             {mesa.capacidad}
                         </div>
-                        {(proximaReserva && profile?.rol !== 'mesero') && (
-                            <div className="flex flex-col items-end gap-1">
-                                <div className="flex items-center gap-1 text-[10px] font-black bg-primary-100 text-primary-700 px-2 py-0.5 rounded-full">
-                                    <Clock className="w-2.5 h-2.5" />
-                                    {proximaReserva?.fecha_hora ? new Date(proximaReserva.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}
-                                </div>
-                                <div className="text-[10px] font-bold text-primary-600 truncate max-w-[100px]">
-                                    {proximaReserva.cliente_nombre} ({proximaReserva.personas})
-                                </div>
-                            </div>
-                        )}
                     </div>
                 </div>
 
-                <div className="mt-2 pt-2 border-t border-current border-opacity-10 text-xs font-bold uppercase tracking-wider text-right">
-                    {ambientEstado === 'libre' ? 'Disponible' : ambientEstado}
+                <div className="mt-2 pt-2 border-t border-current border-opacity-10 space-y-1">
+                    {(proximaReserva && profile?.rol !== 'mesero') ? (
+                        <div className="flex flex-col">
+                            <div className="flex justify-between items-center">
+                                <span className="text-[10px] font-black uppercase opacity-60">Reserva</span>
+                                <div className="flex items-center gap-1 text-[10px] font-black bg-white/50 px-1.5 py-0.5 rounded">
+                                    <Clock className="w-2.5 h-2.5" />
+                                    {new Date(proximaReserva.fecha_hora).toLocaleDateString([], { day: '2-digit', month: '2-digit' })} {new Date(proximaReserva.fecha_hora).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                            </div>
+                            <div className="text-[10px] font-bold truncate mt-0.5">
+                                {proximaReserva.cliente_nombre} ({proximaReserva.personas})
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-xs font-bold uppercase tracking-wider text-right">
+                            {ambientEstado === 'libre' ? 'Disponible' : ambientEstado}
+                        </div>
+                    )}
                 </div>
             </button>
             {(mesa.estado !== 'libre' && profile?.rol !== 'mesero') && (
