@@ -28,7 +28,6 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
     const [invoicePayments, setInvoicePayments] = useState<{ metodo: string, valor: number, referencia: string }[]>([])
     const [isSavingInvoice, setIsSavingInvoice] = useState(false)
     const [isClientFormOpen, setIsClientFormOpen] = useState(false)
-    const [sriSystemFinanciero, setSriSystemFinanciero] = useState(false)
     const [newClient, setNewClient] = useState({
         identificacion: '',
         nombre: '',
@@ -98,75 +97,36 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
 
     const handleSaveClient = async () => {
         try {
-            if (!newClient.identificacion || !newClient.nombre) {
-                alert('Identificación y Nombre son obligatorios')
-                return
-            }
-            // Verificar si ya existe un cliente con esa identificación (Bug 3: no duplicar)
-            const existing = clients.find(c => c.identificacion === newClient.identificacion)
-            if (existing) {
-                // Ya existe en la lista local → simplemente seleccionarlo
-                setSelectedClient(existing)
-                setIsClientFormOpen(false)
-                setNewClient({ identificacion: '', nombre: '', email: '', direccion: '', telefono: '' })
-                return
-            }
-            // Verificar también en la BD por si acaso no estuviera en la lista local
-            const { data: existingInDB } = await (await import('../lib/supabase')).supabase
-                .from('clientes')
-                .select('*')
-                .eq('empresa_id', empresa!.id)
-                .eq('identificacion', newClient.identificacion)
-                .maybeSingle()
-
-            if (existingInDB) {
-                // Existe en BD pero no en lista local: agregarlo a la lista local y seleccionarlo
-                setClients([...clients, existingInDB])
-                setSelectedClient(existingInDB)
-                setIsClientFormOpen(false)
-                setNewClient({ identificacion: '', nombre: '', email: '', direccion: '', telefono: '' })
-                return
-            }
-
-            // No existe → crear nuevo
-            const saved = await facturacionService.createCliente({
+            setIsSavingInvoice(true)
+            const created = await facturacionService.createCliente({
                 ...newClient,
                 empresa_id: empresa!.id
             })
-            setClients([...clients, saved])
-            setSelectedClient(saved)
+            setClients([...clients, created])
+            setSelectedClient(created)
             setIsClientFormOpen(false)
-            setNewClient({ identificacion: '', nombre: '', email: '', direccion: '', telefono: '' })
-        } catch (error: any) {
-            alert(`Error al guardar cliente: ${error.message}`)
+        } catch (error) {
+            alert('Error al guardar cliente')
+        } finally {
+            setIsSavingInvoice(false)
         }
     }
 
     const handleExecuteInvoicing = async () => {
-        if (!pedido || !selectedClient) return
-
-        if (pedido.total <= 0) {
-            alert('No se puede facturar un pedido con valor $0.00. Si el pedido está vacío, debe ser cancelado.')
-            return
-        }
-
-        if (Math.abs(totalPagado - pedido.total) > 0.01) {
-            alert(`El total pagado (${formatCurrency(totalPagado)}) debe coincidir con el total (${formatCurrency(pedido.total)})`)
-            return
-        }
+        if (!selectedClient) return alert('Seleccione un cliente')
+        if (!cajaSesion) return alert('No hay una caja abierta para facturar')
 
         try {
             setIsSavingInvoice(true)
             const factura = await facturacionService.generarFacturaDesdePedido(pedido, {
                 clienteId: selectedClient.id,
-                pagos: invoicePayments.map(p => ({ ...p, valor: Number(p.valor) })),
-                sri_utilizacion_sistema_financiero: sriSystemFinanciero,
-                caja_sesion_id: cajaSesion?.id
+                pagos: invoicePayments,
+                caja_sesion_id: cajaSesion.id
             })
+
             onSuccess(factura)
         } catch (error: any) {
-            console.error('Error al facturar:', error)
-            alert(`Error al facturar: ${error.message}`)
+            alert('Error al facturar: ' + error.message)
         } finally {
             setIsSavingInvoice(false)
         }
@@ -174,242 +134,240 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
 
     if (!isOpen) return null
 
+    const filteredClients = clients.filter(c =>
+        c.nombre?.toLowerCase().includes(searchClient.toLowerCase()) ||
+        c.identificacion?.includes(searchClient)
+    )
+
     return (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
-                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                    <div>
-                        <h2 className="text-xl font-bold text-slate-900">Finalizar Venta</h2>
-                        {pedido && (
-                            <p className="text-sm text-slate-500">Total a pagar: <span className="font-bold text-primary-600">{formatCurrency(pedido.total)}</span></p>
-                        )}
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl min-h-[600px] flex flex-col md:flex-row overflow-hidden animate-in fade-in zoom-in duration-200">
+                {/* Panel Izquierdo: Selección de Cliente y Pagos */}
+                <div className="flex-1 p-6 space-y-6 border-r border-slate-100 overflow-y-auto max-h-[90vh]">
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-xl font-bold text-slate-900 flex items-center gap-2">
+                            <CreditCard className="w-6 h-6 text-primary-600" />
+                            Facturación
+                        </h2>
+                        <button onClick={onClose} className="md:hidden p-2 hover:bg-slate-100 rounded-full">
+                            <X className="w-5 h-5 text-slate-400" />
+                        </button>
                     </div>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
-                        <X className="w-5 h-5 text-slate-500" />
-                    </button>
-                </div>
 
-                <div className="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
-                    {/* Sección Cliente */}
+                    {/* Selector de Cliente */}
                     <div className="space-y-3">
-                        <label className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wider">
-                            <User className="w-4 h-4 text-primary-500" />
+                        <label className="text-sm font-bold text-slate-700 flex justify-between items-center">
                             Datos del Cliente
+                            {!isClientFormOpen && (
+                                <button
+                                    onClick={() => setIsClientFormOpen(true)}
+                                    className="text-primary-600 hover:text-primary-700 flex items-center gap-1"
+                                >
+                                    <UserPlus className="w-4 h-4" />
+                                    Nuevo
+                                </button>
+                            )}
                         </label>
-                        <div className="flex gap-2">
-                            <div className="relative flex-1">
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                <input
-                                    type="text"
-                                    placeholder="Buscar cliente por nombre o RUC..."
-                                    className="w-full pl-10 pr-4 py-2 rounded-lg border border-slate-200 outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                                    value={searchClient}
-                                    onChange={(e) => setSearchClient(e.target.value)}
-                                />
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setIsClientFormOpen(!isClientFormOpen)}
-                                className={cn(
-                                    "p-2 rounded-lg transition-colors",
-                                    isClientFormOpen ? "bg-primary-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                                )}
-                                title="Nuevo Cliente"
-                            >
-                                <UserPlus className="w-5 h-5" />
-                            </button>
-                        </div>
 
-                        {isClientFormOpen && (
-                            <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3 animate-in fade-in slide-in-from-top-2">
+                        {isClientFormOpen ? (
+                            <div className="bg-slate-50 p-4 rounded-xl border-2 border-primary-100 space-y-4 animate-in slide-in-from-top-2">
                                 <div className="grid grid-cols-2 gap-3">
-                                    <input
-                                        placeholder="RUC/Cédula"
-                                        className="px-3 py-2 rounded-lg border border-slate-200 text-sm"
-                                        value={newClient.identificacion}
-                                        onChange={e => setNewClient({ ...newClient, identificacion: e.target.value })}
-                                    />
-                                    <input
-                                        placeholder="Nombre Completo"
-                                        className="px-3 py-2 rounded-lg border border-slate-200 text-sm"
-                                        value={newClient.nombre}
-                                        onChange={e => setNewClient({ ...newClient, nombre: e.target.value })}
-                                    />
-                                </div>
-                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="col-span-2">
+                                        <input
+                                            placeholder="Identificación / RUC"
+                                            className="w-full px-4 py-2 rounded-lg border border-slate-200"
+                                            value={newClient.identificacion}
+                                            onChange={(e) => setNewClient({ ...newClient, identificacion: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="col-span-2">
+                                        <input
+                                            placeholder="Nombre / Razón Social"
+                                            className="w-full px-4 py-2 rounded-lg border border-slate-200"
+                                            value={newClient.nombre}
+                                            onChange={(e) => setNewClient({ ...newClient, nombre: e.target.value })}
+                                        />
+                                    </div>
                                     <input
                                         placeholder="Email"
-                                        className="px-3 py-2 rounded-lg border border-slate-200 text-sm"
+                                        className="px-4 py-2 rounded-lg border border-slate-200"
                                         value={newClient.email}
-                                        onChange={e => setNewClient({ ...newClient, email: e.target.value })}
+                                        onChange={(e) => setNewClient({ ...newClient, email: e.target.value })}
                                     />
                                     <input
                                         placeholder="Teléfono"
-                                        className="px-3 py-2 rounded-lg border border-slate-200 text-sm"
+                                        className="px-4 py-2 rounded-lg border border-slate-200"
                                         value={newClient.telefono}
-                                        onChange={e => setNewClient({ ...newClient, telefono: e.target.value })}
+                                        onChange={(e) => setNewClient({ ...newClient, telefono: e.target.value })}
                                     />
                                 </div>
-                                <input
-                                    placeholder="Dirección"
-                                    className="w-full px-3 py-2 rounded-lg border border-slate-200 text-sm"
-                                    value={newClient.direccion}
-                                    onChange={e => setNewClient({ ...newClient, direccion: e.target.value })}
-                                />
-                                <div className="flex justify-end gap-2">
-                                    <button onClick={() => setIsClientFormOpen(false)} className="px-3 py-1 text-xs text-slate-500 font-bold uppercase">Cancelar</button>
-                                    <button onClick={handleSaveClient} className="px-3 py-1 bg-primary-600 text-white rounded text-xs font-bold uppercase flex items-center gap-1">
-                                        <Save className="w-3 h-3" /> Guardar Cliente
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                        {searchClient && (
-                            <div className="border border-slate-200 rounded-lg divide-y divide-slate-100 max-h-32 overflow-y-auto shadow-sm">
-                                {clients.filter(c => c.nombre?.toLowerCase().includes(searchClient.toLowerCase()) || c.identificacion?.includes(searchClient)).map(c => (
+                                <div className="flex gap-2">
                                     <button
-                                        key={c.id}
-                                        onClick={() => {
-                                            setSelectedClient(c)
-                                            setSearchClient('')
-                                        }}
-                                        className="w-full text-left px-4 py-2 text-sm hover:bg-primary-50 transition-colors flex justify-between"
+                                        onClick={() => setIsClientFormOpen(false)}
+                                        className="flex-1 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold shadow-sm"
                                     >
-                                        <span>{c.nombre}</span>
-                                        <span className="text-slate-400 font-mono">{c.identificacion}</span>
+                                        Cancelar
                                     </button>
-                                ))}
-                            </div>
-                        )}
-                        {selectedClient && (
-                            <div className="p-3 bg-primary-50 border border-primary-100 rounded-xl flex justify-between items-center">
-                                <div>
-                                    <p className="text-sm font-bold text-primary-900">{selectedClient.nombre}</p>
-                                    <p className="text-xs text-primary-600">{selectedClient.identificacion} • {selectedClient.email || 'Sin correo'}</p>
+                                    <button
+                                        onClick={handleSaveClient}
+                                        className="flex-1 py-2 bg-primary-600 text-white rounded-lg text-sm font-bold shadow-md shadow-primary-200"
+                                    >
+                                        Guardar Cliente
+                                    </button>
                                 </div>
-                                <button onClick={() => setSelectedClient(null)} className="text-primary-400 hover:text-primary-600">
-                                    <X className="w-4 h-4" />
-                                </button>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                <div className="relative">
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Buscar por identificación o nombre..."
+                                        className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
+                                        value={searchClient}
+                                        onChange={(e) => setSearchClient(e.target.value)}
+                                    />
+                                </div>
+
+                                {searchClient && (
+                                    <div className="absolute z-10 w-full max-w-md bg-white border border-slate-200 rounded-xl shadow-2xl max-h-60 overflow-y-auto">
+                                        {filteredClients.map(client => (
+                                            <button
+                                                key={client.id}
+                                                className="w-full px-4 py-3 text-left hover:bg-slate-50 flex items-center justify-between border-b border-slate-50 last:border-0"
+                                                onClick={() => {
+                                                    setSelectedClient(client)
+                                                    setSearchClient('')
+                                                }}
+                                            >
+                                                <div>
+                                                    <p className="font-bold text-slate-900">{client.nombre}</p>
+                                                    <p className="text-xs text-slate-500">{client.identificacion}</p>
+                                                </div>
+                                                <User className="w-4 h-4 text-slate-400" />
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+
+                                {selectedClient && (
+                                    <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl flex items-center justify-between">
+                                        <div>
+                                            <p className="text-xs font-bold text-emerald-600 uppercase tracking-wider">Cliente Seleccionado</p>
+                                            <p className="font-black text-emerald-900">{selectedClient.nombre}</p>
+                                            <p className="text-xs text-emerald-700">{selectedClient.identificacion}</p>
+                                        </div>
+                                        <button onClick={() => setSelectedClient(null)} className="text-emerald-400 hover:text-emerald-600">
+                                            <X className="w-5 h-5" />
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         )}
                     </div>
 
-                    {/* Sección Pagos */}
+                    {/* Medios de Pago */}
                     <div className="space-y-4 pt-4 border-t border-slate-100">
-                        <div className="flex justify-between items-center">
-                            <label className="flex items-center gap-2 text-sm font-bold text-slate-700 uppercase tracking-wider">
-                                <CreditCard className="w-4 h-4 text-primary-500" />
-                                Formas de Pago
-                            </label>
+                        <div className="flex items-center justify-between">
+                            <label className="text-sm font-bold text-slate-700">Formas de Pago</label>
                             <button
                                 onClick={handleAddPaymentRow}
-                                className="text-xs flex items-center gap-1 font-bold text-primary-600 hover:text-primary-700"
+                                className="text-primary-600 hover:text-primary-700 flex items-center gap-1 text-sm font-bold"
                             >
-                                <Plus className="w-3 h-3" /> Agregar Pago
+                                <Plus className="w-4 h-4" />
+                                Agregar Pago
                             </button>
                         </div>
 
                         <div className="space-y-3">
-                            {invoicePayments.map((p, idx) => (
-                                <div key={idx} className="flex flex-wrap sm:flex-nowrap gap-3 items-end bg-slate-50 p-3 rounded-xl border border-slate-200">
-                                    <div className="flex-1 min-w-[120px]">
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Método</label>
-                                        <select
-                                            value={p.metodo}
-                                            onChange={(e) => handlePaymentChange(idx, 'metodo', e.target.value)}
-                                            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500"
-                                        >
-                                            <option value="efectivo">EFECTIVO</option>
-                                            <option value="tarjeta">TARJETA CREDITO/DEBITO</option>
-                                            <option value="transferencia">TRANSFERENCIA</option>
-                                            <option value="otros">OTROS</option>
-                                        </select>
-                                    </div>
-                                    <div className="w-24 sm:w-32">
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Valor</label>
+                            {invoicePayments.map((p, i) => (
+                                <div key={i} className="flex gap-2 items-start animate-in fade-in slide-in-from-left-2 transition-all">
+                                    <select
+                                        className="flex-1 px-3 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-primary-500"
+                                        value={p.metodo}
+                                        onChange={(e) => handlePaymentChange(i, 'metodo', e.target.value)}
+                                    >
+                                        <option value="efectivo">Efectivo</option>
+                                        <option value="tarjeta">Tarjeta</option>
+                                        <option value="transferencia">Transferencia</option>
+                                        <option value="otros">Otros</option>
+                                    </select>
+                                    <div className="flex-1 relative">
+                                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>
                                         <input
                                             type="number"
-                                            step="0.01"
-                                            value={p.valor || ''}
-                                            onChange={(e) => handlePaymentChange(idx, 'valor', e.target.value)}
-                                            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500 font-mono"
+                                            className="w-full pl-7 pr-3 py-2 rounded-lg border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-primary-500"
+                                            value={p.valor}
+                                            onChange={(e) => handlePaymentChange(i, 'valor', e.target.value)}
                                         />
                                     </div>
-                                    <div className="flex-1 min-w-[100px]">
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase mb-1">Ref/Notas</label>
-                                        <input
-                                            type="text"
-                                            placeholder="Voucher, # transf..."
-                                            value={p.referencia}
-                                            onChange={(e) => handlePaymentChange(idx, 'referencia', e.target.value)}
-                                            className="w-full bg-white border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-primary-500"
-                                        />
-                                    </div>
-                                    {invoicePayments.length > 1 && (
-                                        <button
-                                            onClick={() => handleRemovePaymentRow(idx)}
-                                            className="p-2 text-red-400 hover:text-red-600 transition-colors"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    )}
+                                    <button
+                                        onClick={() => handleRemovePaymentRow(i)}
+                                        className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                                    >
+                                        <Trash2 className="w-4 h-4" />
+                                    </button>
                                 </div>
                             ))}
-                        </div>
-
-                        {/* Requerimiento SRI */}
-                        <div className="pt-4 border-t border-slate-100">
-                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-3">Requerimiento SRI</label>
-                            <div className="grid grid-cols-2 gap-3">
-                                <button
-                                    onClick={() => setSriSystemFinanciero(false)}
-                                    className={cn(
-                                        "px-3 py-2 rounded-xl border text-xs font-bold transition-all flex items-center justify-between",
-                                        !sriSystemFinanciero ? "border-primary-600 bg-primary-50 text-primary-700 shadow-sm" : "border-slate-200 text-slate-500 hover:border-slate-300"
-                                    )}
-                                >
-                                    Sin Utilización Sist. Financiero
-                                    {!sriSystemFinanciero && <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />}
-                                </button>
-                                <button
-                                    onClick={() => setSriSystemFinanciero(true)}
-                                    className={cn(
-                                        "px-3 py-2 rounded-xl border text-xs font-bold transition-all flex items-center justify-between",
-                                        sriSystemFinanciero ? "border-primary-600 bg-primary-50 text-primary-700 shadow-sm" : "border-slate-200 text-slate-500 hover:border-slate-300"
-                                    )}
-                                >
-                                    Con Utilización Sist. Financiero
-                                    {sriSystemFinanciero && <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />}
-                                </button>
-                            </div>
                         </div>
                     </div>
                 </div>
 
-                {/* Footer Modal */}
-                <div className="p-6 bg-slate-50 border-t border-slate-100 flex flex-col gap-4">
-                    <div className="flex justify-between items-center px-2">
-                        <div className="text-sm font-medium text-slate-500">
-                            Total Pagado: <span className={cn("font-bold", Math.abs(totalPagado - pedido.total) < 0.01 ? "text-emerald-600" : "text-red-500")}>
-                                {formatCurrency(totalPagado)}
-                            </span>
+                {/* Panel Derecho: Resumen y Acción */}
+                <div className="w-full md:w-80 bg-slate-50 p-6 flex flex-col justify-between">
+                    <div className="space-y-6">
+                        <div className="hidden md:flex justify-between items-center bg-white p-2 rounded-xl mb-4 border border-slate-100">
+                            <h3 className="font-black text-slate-700 text-sm">RESUMEN DE CUENTA</h3>
+                            <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-lg text-slate-400">
+                                <X className="w-4 h-4" />
+                            </button>
                         </div>
-                        <div className="text-lg font-black text-slate-900">
-                            Total: {formatCurrency(pedido.total)}
+
+                        <div className="space-y-4">
+                            <div className="flex justify-between items-center">
+                                <span className="text-slate-500">Subtotal</span>
+                                <span className="font-bold text-slate-700">{formatCurrency(pedido.total / 1.15)}</span>
+                            </div>
+                            <div className="flex justify-between items-center font-bold">
+                                <span className="text-slate-500">IVA (15%)</span>
+                                <span className="text-slate-700">{formatCurrency(pedido.total - (pedido.total / 1.15))}</span>
+                            </div>
+                            <div className="pt-4 border-t-2 border-slate-200/50 flex justify-between items-center">
+                                <span className="text-slate-900 font-black">TOTAL</span>
+                                <span className="text-2xl font-black text-primary-600">{formatCurrency(pedido.total)}</span>
+                            </div>
+                        </div>
+
+                        <div className="space-y-3 pt-6">
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-slate-500">Recibido</span>
+                                <span className="font-bold text-emerald-600">{formatCurrency(totalPagado)}</span>
+                            </div>
+                            <div className="flex justify-between items-center text-sm">
+                                <span className="text-slate-500">Pendiente</span>
+                                <span className={cn(
+                                    "font-black",
+                                    Math.abs(totalPagado - pedido.total) < 0.01 ? "text-emerald-600" : "text-amber-600"
+                                )}>
+                                    {formatCurrency(pedido.total - totalPagado)}
+                                </span>
+                            </div>
+
+                            {totalPagado > pedido.total && (
+                                <div className="p-3 bg-primary-50 rounded-xl border border-primary-100 animate-bounce mt-4">
+                                    <p className="text-[10px] font-black text-primary-600 uppercase tracking-widest text-center">Cambio a Entregar</p>
+                                    <p className="text-xl font-black text-primary-700 text-center">{formatCurrency(totalPagado - pedido.total)}</p>
+                                </div>
+                            )}
                         </div>
                     </div>
-                    <div className="flex gap-3">
-                        <button
-                            onClick={onClose}
-                            className="flex-1 px-4 py-3 rounded-xl border border-slate-200 font-bold text-slate-600 hover:bg-white transition-colors"
-                        >
-                            {profile?.rol === 'mesero' ? 'Cerrar' : 'Cancelar'}
-                        </button>
+
+                    <div className="space-y-3 mt-8">
                         {profile?.rol !== 'mesero' ? (
                             <button
                                 onClick={handleExecuteInvoicing}
-                                disabled={isSavingInvoice || Math.abs(totalPagado - pedido.total) > 0.01}
-                                className="flex-2 bg-primary-600 text-white rounded-xl px-8 py-3 font-bold hover:bg-primary-700 shadow-xl shadow-primary-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale transition-all"
+                                disabled={isSavingInvoice || Math.abs(totalPagado - pedido.total) > 0.01 && totalPagado < pedido.total}
+                                className="w-full bg-primary-600 text-white rounded-xl py-4 font-bold hover:bg-primary-700 shadow-xl shadow-primary-200 flex items-center justify-center gap-2 disabled:opacity-50 disabled:grayscale transition-all"
                             >
                                 {isSavingInvoice ? (
                                     <>
@@ -419,15 +377,21 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
                                 ) : (
                                     <>
                                         <Save className="w-5 h-5" />
-                                        Confirmar y Emitir Factura
+                                        Generar Factura
                                     </>
                                 )}
                             </button>
                         ) : (
-                            <div className="flex-2 bg-slate-100 text-slate-500 rounded-xl px-4 py-3 text-xs font-bold flex items-center justify-center text-center">
+                            <div className="w-full bg-slate-100 text-slate-500 rounded-xl px-4 py-4 text-xs font-bold flex items-center justify-center text-center">
                                 Solo personal de caja puede emitir facturas
                             </div>
                         )}
+                        <button
+                            onClick={onClose}
+                            className="w-full py-3 text-slate-500 font-bold hover:text-slate-700"
+                        >
+                            Cancelar
+                        </button>
                     </div>
                 </div>
             </div>

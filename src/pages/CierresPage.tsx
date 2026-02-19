@@ -148,11 +148,6 @@ export function CierresPage() {
                                         </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex justify-end gap-2">
-                                                {/* 
-                                            <button className="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition-colors" title="Ver Detalle">
-                                                <Eye className="w-4 h-4" />
-                                            </button>
-                                            */}
                                                 {(profile?.rol === 'admin_plataforma' || profile?.rol === 'oficina') && (
                                                     <button
                                                         onClick={() => handleDelete(sesion.id)}
