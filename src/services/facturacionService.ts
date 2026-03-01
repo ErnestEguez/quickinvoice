@@ -1,7 +1,8 @@
 import { supabase } from '../lib/supabase'
 import { sriService } from './sriService'
-import { emailService } from './emailService'
 import { kardexService } from './kardexService'
+// Nota: emailService ya no se usa directamente aquí.
+// El correo se envía desde la Edge Function sri-signer vía Resend.
 
 export interface Cliente {
     id: string
@@ -18,12 +19,15 @@ export interface SriConfig {
     establecimiento: string // 3 digits
     punto_emision: string    // 3 digits
     secuencial_inicio: number
-    firma_url: string | null
+    firma_url: string | null   // URL pública (legacy)
+    firma_path: string | null  // Path en Storage (usado por Edge Function sri-signer)
     firma_password?: string
     mail_host?: string
     mail_port?: number
     mail_user?: string
     mail_pass?: string
+    obligado_contabilidad?: 'SI' | 'NO'
+    regimen_rimpe?: boolean
 }
 
 export const facturacionService = {
@@ -125,16 +129,17 @@ export const facturacionService = {
 
             // 1.5 Generar Clave de Acceso
             const { data: empData } = await supabase.from('empresas').select('ruc').eq('id', pedido.empresa_id).single()
+            const rucEmpresa = empData?.ruc || '1790000000001'
             const claveAcceso = sriService.generarClaveAcceso(
                 new Date(),
-                empData?.ruc || '1790000000001',
+                rucEmpresa,
                 config.ambiente || 'PRUEBAS',
                 est,
                 pto,
                 secuencialFormateado
             )
 
-            // 1. Crear el Comprobante (CABECERA)
+            // 1. Crear el Comprobante (CABECERA) — arranca en PENDIENTE hasta que el backend confirme
             const { data: factura, error: errorFactura } = await supabase
                 .from('comprobantes')
                 .insert({
@@ -144,11 +149,11 @@ export const facturacionService = {
                     tipo_comprobante: 'FACTURA',
                     secuencial: secuencialFormateado,
                     clave_acceso: claveAcceso,
-                    autorizacion_numero: claveAcceso,
+                    autorizacion_numero: null,
                     ambiente: config.ambiente || 'PRUEBAS',
                     total: pedido.total,
-                    estado_sri: 'AUTORIZADO',
-                    fecha_autorizacion: new Date().toISOString(),
+                    estado_sri: 'PENDIENTE',
+                    fecha_autorizacion: null,
                     sri_utilizacion_sistema_financiero,
                     caja_sesion_id: data.caja_sesion_id
                 })
@@ -216,15 +221,33 @@ export const facturacionService = {
                 }
             }
 
-            // 5. Enviar Correo
-            const { data: cliente } = await supabase.from('clientes').select('email').eq('id', clienteId).single()
-            if (cliente?.email) {
-                emailService.enviarComprobante(cliente.email, factura).catch(err => {
-                    console.error('Error enviando correo:', err)
+            // 5. Invocar Edge Function sri-signer (firma XAdES-BES + SRI + correo Resend)
+            try {
+                const { data: sriResult, error: sriErr } = await supabase.functions.invoke('sri-signer', {
+                    body: { comprobante_id: factura.id }
                 })
+
+                if (sriErr) {
+                    console.error('[sri-signer] Error invocando Edge Function:', sriErr)
+                    // No tiramos error: el comprobante queda en PENDIENTE y se puede reintentar
+                } else if (sriResult?.success) {
+                    console.log('[sri-signer] Resultado:', sriResult)
+                } else {
+                    console.warn('[sri-signer] Respuesta inesperada:', sriResult)
+                }
+            } catch (edgeFnErr) {
+                console.error('[sri-signer] Excepción al invocar Edge Function:', edgeFnErr)
+                // El comprobante sigue en PENDIENTE — no bloquea el flujo del cajero
             }
 
-            return factura
+            // 6. Obtener estado actualizado del comprobante (post firma SRI)
+            const { data: facturaActualizada } = await supabase
+                .from('comprobantes')
+                .select('*')
+                .eq('id', factura.id)
+                .single()
+
+            return facturaActualizada || factura
         } catch (error) {
             console.error('Error en el flujo de facturación:', error)
             throw error

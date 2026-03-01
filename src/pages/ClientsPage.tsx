@@ -9,8 +9,12 @@ import {
     Trash2,
     User,
     X,
-    Save
+    Save,
+    Loader2,
+    Search as SearchIcon
 } from 'lucide-react'
+import { supabase } from '../lib/supabase'
+import { validateIdentificacion } from '../lib/utils'
 
 export function ClientsPage() {
     const { empresa } = useAuth()
@@ -19,6 +23,7 @@ export function ClientsPage() {
     const [search, setSearch] = useState('')
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingCliente, setEditingCliente] = useState<Partial<Cliente> | null>(null)
+    const [isSearchingSRI, setIsSearchingSRI] = useState(false)
 
     useEffect(() => {
         if (empresa?.id) {
@@ -38,9 +43,50 @@ export function ClientsPage() {
         }
     }
 
+    async function lookupSRI() {
+        if (!editingCliente?.identificacion) return
+        const id = editingCliente.identificacion.trim()
+        if (!id) return
+
+        const validation = validateIdentificacion(id)
+        if (!validation.isValid) {
+            if (!confirm(`La identificación "${id}" no tiene 10 (Cédula) ni 13 (RUC) dígitos.\n\n¿Es este un Pasaporte?`)) {
+                return
+            }
+        }
+
+        try {
+            setIsSearchingSRI(true)
+            const { data, error } = await supabase.functions.invoke('sri-lookup', {
+                body: { identificacion: id }
+            })
+
+            if (error) throw error
+            const nombre = data?.nombreCompleto || data?.razonSocial
+            if (nombre) {
+                setEditingCliente(prev => ({ ...prev!, nombre }))
+            } else if (data?.error) {
+                alert('No se encontró información para esta identificación en el SRI')
+            }
+        } catch (err) {
+            console.error('Error lookup SRI:', err)
+            confirm('No se pudo consultar el SRI. ¿Desea ingresar el nombre manualmente?')
+        } finally {
+            setIsSearchingSRI(false)
+        }
+    }
+
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
         if (!empresa?.id || !editingCliente) return
+
+        const id = (editingCliente.identificacion || '').trim()
+        const validation = validateIdentificacion(id)
+        if (!validation.isValid) {
+            if (!confirm(`La identificación "${id}" no tiene 10 (Cédula) ni 13 (RUC) dígitos. ¿Es un Pasaporte?`)) {
+                return
+            }
+        }
 
         try {
             if (editingCliente.id) {
@@ -191,15 +237,29 @@ export function ClientsPage() {
                             </button>
                         </div>
                         <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                            <div>
+                            <div className="relative">
                                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Identificación (RUC/Cédula)</label>
                                 <input
                                     required
                                     type="text"
-                                    className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
+                                    className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-primary-500 outline-none pr-10"
                                     value={editingCliente?.identificacion || ''}
                                     onChange={(e) => setEditingCliente({ ...editingCliente, identificacion: e.target.value })}
+                                    onBlur={() => {
+                                        if (editingCliente?.identificacion && editingCliente.identificacion.length >= 10 && !editingCliente.nombre) {
+                                            lookupSRI()
+                                        }
+                                    }}
                                 />
+                                <button
+                                    type="button"
+                                    onClick={lookupSRI}
+                                    disabled={isSearchingSRI}
+                                    className="absolute right-2 bottom-2 p-1 hover:bg-slate-100 rounded text-primary-600 transition-colors"
+                                    title="Buscar en SRI"
+                                >
+                                    {isSearchingSRI ? <Loader2 className="w-3 h-3 animate-spin" /> : <SearchIcon className="w-3 h-3" />}
+                                </button>
                             </div>
                             <div>
                                 <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">Nombre Completo / Razón Social</label>

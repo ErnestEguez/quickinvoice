@@ -74,9 +74,15 @@ export function InvoicePrint() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 border-b-2 border-slate-100 pb-8 relative">
 
                     <div className="space-y-4">
-                        <div className="w-32 h-32 bg-white rounded-2xl flex items-center justify-center overflow-hidden border border-slate-200 p-2 shadow-sm">
+                        <div className="w-32 h-32 bg-white rounded-2xl flex items-center justify-center overflow-hidden border border-slate-200 p-2 shadow-sm print:border-none print:shadow-none bg-transparent">
                             {factura.empresas?.logo_url ? (
-                                <img src={factura.empresas.logo_url} alt="Logo Empresa" className="w-full h-full object-contain" />
+                                <img
+                                    src={factura.empresas.logo_url}
+                                    alt="Logo Empresa"
+                                    className="w-full h-full object-contain print:block"
+                                    crossOrigin="anonymous"
+                                    style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as any}
+                                />
                             ) : (
                                 <div className="text-primary-600 font-black text-3xl">
                                     {factura.empresas?.nombre?.[0]}

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
-import { Plus, Minus, Trash2, ChevronRight, ChevronLeft, Check, Split, X, Mail, Search } from 'lucide-react'
-import { formatCurrency } from '../lib/utils'
+import { Plus, Minus, Trash2, ChevronRight, ChevronLeft, Check, Split, X, Mail, Search, Loader2, Search as SearchIcon } from 'lucide-react'
+import { formatCurrency, validateIdentificacion } from '../lib/utils'
 import { pedidoService } from '../services/pedidoService'
 import { facturacionService } from '../services/facturacionService'
 import { useAuth } from '../contexts/AuthContext'
@@ -45,6 +45,7 @@ export function SplitCheckModal({ isOpen, onClose, pedido, onSuccess }: SplitChe
     const [clientesBD, setClientesBD] = useState<any[]>([])
     const [busquedas, setBusquedas] = useState<Record<number, string>>({})
     const [busquedaOriginal, setBusquedaOriginal] = useState('')
+    const [isSearchingSRI, setIsSearchingSRI] = useState<Record<string, boolean>>({}) // lookup por ID de cliente o 'original'
 
     useEffect(() => {
         if (isOpen && pedido) {
@@ -128,6 +129,50 @@ export function SplitCheckModal({ isOpen, onClose, pedido, onSuccess }: SplitChe
         setBusquedas({ ...busquedas, [idx]: '' })
     }
 
+    // Buscar en SRI para un cliente de la lista o el original
+    const lookupSRI = async (clientId: string, identificacion: string) => {
+        const id = (identificacion || '').trim()
+        if (!id) return
+
+        const validation = validateIdentificacion(id)
+        if (!validation.isValid) {
+            if (id.length > 0 && id.length < 10) {
+                alert('Número de documento incompleto (Mínimo 10 para Cédula o 13 para RUC).')
+                return
+            }
+            if (!confirm(`La identificación "${id}" no tiene 10 ni 13 dígitos.\n\n¿Es este un Pasaporte?`)) {
+                return
+            }
+        }
+
+        try {
+            setIsSearchingSRI(prev => ({ ...prev, [clientId]: true }))
+            const { data, error } = await supabase.functions.invoke('sri-lookup', {
+                body: { identificacion: id }
+            })
+
+            if (error) throw error
+            const nombre = data?.nombreCompleto || data?.razonSocial
+            if (nombre) {
+                if (clientId === 'original') {
+                    setNombreOriginal(nombre)
+                } else {
+                    const idx = clientes.findIndex(c => c.id === clientId)
+                    if (idx >= 0) {
+                        updateCliente(idx, 'nombre', nombre)
+                    }
+                }
+            } else if (data?.error) {
+                alert('No se encontró información en el SRI para: ' + id)
+            }
+        } catch (err) {
+            console.error('Error lookup SRI:', err)
+            alert('Error al consultar el SRI. Por favor, verifique su conexión o intente más tarde.')
+        } finally {
+            setIsSearchingSRI(prev => ({ ...prev, [clientId]: false }))
+        }
+    }
+
     const moveToClient = (itemIdx: number, clientIdx: number, cantidad: number = 1) => {
         const item = itemsOriginales[itemIdx]
         if (item.cantidad < cantidad) return
@@ -180,7 +225,27 @@ export function SplitCheckModal({ isOpen, onClose, pedido, onSuccess }: SplitChe
     const originalTieneItems = itemsOriginales.some(i => i.cantidad > 0)
 
     const handleNextStep = () => {
-        // Removed the validation for clientes.length === 0
+        if (step === 1) {
+            // Validar identificación original (si existe)
+            if (identificacionOriginal && identificacionOriginal !== '9999999999999') {
+                const val = validateIdentificacion(identificacionOriginal)
+                if (!val.isValid) {
+                    const isPassport = confirm(`La identificación "${identificacionOriginal}" (Mesa Principal) no tiene 10 ni 13 dígitos.\n\n¿Es este un Pasaporte?`)
+                    if (!isPassport) return
+                }
+            }
+
+            // Validar identificaciones de clientes adicionales
+            for (const c of clientes) {
+                if (c.identificacion && c.identificacion !== '9999999999999') {
+                    const val = validateIdentificacion(c.identificacion)
+                    if (!val.isValid) {
+                        const isPassport = confirm(`La identificación "${c.identificacion}" para ${c.nombre} no tiene 10 ni 13 dígitos.\n\n¿Es este un Pasaporte?`)
+                        if (!isPassport) return
+                    }
+                }
+            }
+        }
         setStep(step + 1)
     }
 
@@ -354,14 +419,28 @@ export function SplitCheckModal({ isOpen, onClose, pedido, onSuccess }: SplitChe
                                             </div>
                                         )}
                                     </div>
-                                    <div className="grid grid-cols-2 gap-2">
-                                        <input
-                                            type="text"
-                                            value={identificacionOriginal}
-                                            onChange={(e) => setIdentificacionOriginal(e.target.value)}
-                                            className="px-3 py-2 bg-white rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary-500 outline-none text-sm font-mono"
-                                            placeholder="C.I. / RUC (Principal)"
-                                        />
+                                    <div className="grid grid-cols-2 gap-2 relative">
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                value={identificacionOriginal}
+                                                onChange={(e) => setIdentificacionOriginal(e.target.value)}
+                                                onBlur={() => {
+                                                    if (identificacionOriginal.length >= 10 && !nombreOriginal) {
+                                                        lookupSRI('original', identificacionOriginal)
+                                                    }
+                                                }}
+                                                className="w-full px-3 py-2 bg-white rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary-500 outline-none text-sm font-mono pr-8"
+                                                placeholder="C.I. / RUC (Principal)"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => lookupSRI('original', identificacionOriginal)}
+                                                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-primary-600"
+                                            >
+                                                {isSearchingSRI['original'] ? <Loader2 className="w-3 h-3 animate-spin" /> : <SearchIcon className="w-3 h-3" />}
+                                            </button>
+                                        </div>
                                         <input
                                             type="email"
                                             value={emailOriginal}
@@ -424,13 +503,34 @@ export function SplitCheckModal({ isOpen, onClose, pedido, onSuccess }: SplitChe
                                                 <p className="text-xs text-emerald-600 font-medium">✓ Cliente existente seleccionado</p>
                                             )}
                                             <div className="grid grid-cols-2 gap-2">
-                                                <input
-                                                    type="text"
-                                                    value={cliente.identificacion || ''}
-                                                    onChange={(e) => updateCliente(idx, 'identificacion', e.target.value)}
-                                                    className="px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary-500 outline-none text-sm font-mono"
-                                                    placeholder="C.I. / RUC"
-                                                />
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        value={cliente.identificacion || ''}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value.replace(/\D/g, ''); // Solo números por defecto
+                                                            updateCliente(idx, 'identificacion', e.target.value);
+                                                            if (val.length === 10 || val.length === 13) {
+                                                                lookupSRI(cliente.id, e.target.value);
+                                                            }
+                                                        }}
+                                                        onBlur={() => {
+                                                            const id = (cliente.identificacion || '').trim();
+                                                            if (id && id.length >= 10 && !cliente.nombre.startsWith('Cliente ')) {
+                                                                lookupSRI(cliente.id, id)
+                                                            }
+                                                        }}
+                                                        className="w-full px-3 py-2 rounded-lg border border-slate-300 focus:ring-2 focus:ring-primary-500 outline-none text-sm font-mono pr-8"
+                                                        placeholder="C.I. / RUC"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => lookupSRI(cliente.id, cliente.identificacion || '')}
+                                                        className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-primary-600"
+                                                    >
+                                                        {isSearchingSRI[cliente.id] ? <Loader2 className="w-3 h-3 animate-spin" /> : <SearchIcon className="w-3 h-3" />}
+                                                    </button>
+                                                </div>
                                                 <input
                                                     type="email"
                                                     value={cliente.email || ''}

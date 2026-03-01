@@ -51,7 +51,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
     const navigation = [
         { to: '/configuracion', icon: Settings, label: 'Plataforma', roles: ['admin_plataforma'] },
-        { to: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['oficina'] },
+        { to: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['oficina', 'admin_plataforma'] },
         { to: '/mesas', icon: UtensilsCrossed, label: 'Mesas', roles: ['oficina', 'mesero'] },
         { to: '/pedidos', icon: ClipboardList, label: 'Pedidos', roles: ['oficina', 'mesero'] },
         { to: '/productos', icon: Package, label: 'Productos', roles: ['oficina'] },
@@ -59,7 +59,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         { to: '/proveedores', icon: Truck, label: 'Proveedores', roles: ['oficina'] },
         { to: '/inventario', icon: Package, label: 'Inventario', roles: ['oficina'] },
         { to: '/kardex', icon: BarChart3, label: 'Kardex', roles: ['oficina'] },
-        { to: '/cierres', icon: ClipboardList, label: 'Cierres de Caja', roles: ['oficina', 'admin_plataforma'] },
+        { to: '/cierres', icon: ClipboardList, label: 'Cierres de Caja', roles: ['oficina'] },
         { to: '/facturacion', icon: FileText, label: 'Facturación', roles: ['oficina'] },
         { to: '/configuracion', icon: Settings, label: 'Configuración', roles: ['oficina'] },
     ]
@@ -99,15 +99,17 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     </nav>
 
                     <div className="p-4 border-t border-slate-100 space-y-2">
-                        <button
-                            onClick={() => setIsCierreCajaOpen(true)}
-                            className="flex items-center gap-3 w-full px-4 py-3 text-slate-600 hover:bg-slate-100 hover:text-slate-900 rounded-lg transition-colors group"
-                        >
-                            <div className="w-5 h-5 flex items-center justify-center">
-                                <span className="font-mono font-bold text-xs border border-current rounded px-0.5">$$</span>
-                            </div>
-                            {isSidebarOpen && <span>Cerrar Caja</span>}
-                        </button>
+                        {profile?.rol === 'oficina' && (
+                            <button
+                                onClick={() => setIsCierreCajaOpen(true)}
+                                className="flex items-center gap-3 w-full px-4 py-3 text-slate-600 hover:bg-slate-100 hover:text-slate-900 rounded-lg transition-colors group"
+                            >
+                                <div className="w-5 h-5 flex items-center justify-center">
+                                    <span className="font-mono font-bold text-xs border border-current rounded px-0.5">$$</span>
+                                </div>
+                                {isSidebarOpen && <span>Cerrar Caja</span>}
+                            </button>
+                        )}
                         <button
                             onClick={() => signOut()}
                             className="flex items-center gap-3 w-full px-4 py-3 text-slate-600 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors group"

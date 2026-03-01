@@ -4,6 +4,7 @@ VITE_SUPABASE_URL=https://alttjjytmcrixghxavbt.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFsdHRqanl0bWNyaXhnaHhhdmJ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk3NDAwMDIsImV4cCI6MjA4NTMxNjAwMn0.96Wyf_Horbk58UOW09LbDFMhL-UQD_FWBJSYbDBWT8Y
 
 luis@cafearoma.com		luis2026		mesero
+alicia@cafearoma.com		alicia2026		oficina
 oficina@cafearoma.com	 	Oficina@2026
 superadmin@restoflow.com	Super@2026
 oficina@azullimon.com		Azul@2026

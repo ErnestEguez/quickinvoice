@@ -11,6 +11,7 @@ export const InvoiceTicketPOS = forwardRef<HTMLDivElement, InvoiceTicketPOSProps
 
     return (
         <div ref={ref} className="bg-white p-[5mm] w-[80mm] font-mono text-[10px] leading-tight text-black print:p-0">
+            <style dangerouslySetInnerHTML={{ __html: '@page { size: 80mm auto; margin: 0; }' }} />
             {/* Header Logos */}
             <div className="flex justify-center mb-4">
                 {factura.empresas?.logo_url ? (

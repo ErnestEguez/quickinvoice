@@ -62,7 +62,20 @@ export function CierresPage() {
         s.estado.toLowerCase().includes(search.toLowerCase())
     )
 
-    if (loading) return <div className="p-12 text-center">Cargando historial de cierres...</div>
+    if (loading) return <div className="p-12 text-center text-slate-500">Cargando historial de cierres...</div>
+
+    if (profile?.rol === 'admin_plataforma') {
+        return (
+            <div className="p-12 text-center space-y-4">
+                <div className="bg-amber-50 border border-amber-100 p-8 rounded-2xl max-w-md mx-auto">
+                    <h2 className="text-xl font-bold text-amber-900">Historial no disponible</h2>
+                    <p className="text-amber-700 text-sm mt-2">
+                        El historial de cierres de caja es gestionado individualmente por cada empresa y no es visible para el Administrador de Plataforma.
+                    </p>
+                </div>
+            </div>
+        )
+    }
 
     return (
         <div className="space-y-8">

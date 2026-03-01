@@ -14,3 +14,14 @@ export function formatCurrency(amount: number | string | null | undefined) {
         currency: 'USD',
     }).format(value)
 }
+
+export function validateIdentificacion(id: string): { isValid: boolean, type: 'CEDULA' | 'RUC' | 'PASSPORT' | 'CONSUMIDOR_FINAL' | 'INVALID' } {
+    const cleanId = (id || '').trim();
+    if (cleanId === '9999999999999' || cleanId === '9999999999') return { isValid: true, type: 'CONSUMIDOR_FINAL' };
+    if (!cleanId) return { isValid: false, type: 'INVALID' };
+
+    if (cleanId.length === 10) return { isValid: true, type: 'CEDULA' };
+    if (cleanId.length === 13) return { isValid: true, type: 'RUC' };
+
+    return { isValid: false, type: 'INVALID' };
+}

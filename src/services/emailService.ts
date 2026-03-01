@@ -1,12 +1,15 @@
+// emailService.ts
+// El envío de correos se realiza dentro de la Edge Function sri-signer (Resend).
+// Este módulo es un stub; la lógica real de correo está en el backend.
 export const emailService = {
-    async enviarComprobante(email: string, comprobante: any) {
-        // En una implementación real usaríamos Resend, SendGrid o un Edge Function de Supabase
-        console.log(`[EMAIL MOCK] Enviando comprobante ${comprobante.secuencial} a ${email}`);
-
-        // Simulamos un delay de red
-        await new Promise(resolve => setTimeout(resolve, 1500));
-
-        console.log(`[EMAIL MOCK] Correo enviado exitosamente a ${email}`);
+    /**
+     * NO-OP: El correo se envía automáticamente dentro de la Edge Function
+     * sri-signer al finalizar la autorización SRI.
+     * Este método se mantiene para compatibilidad con el flujo existente.
+     */
+    async enviarComprobante(_email: string, _comprobante: any): Promise<boolean> {
+        // El correo ya fue enviado por la Edge Function sri-signer via Resend.
+        // No hacer nada aquí para evitar duplicados.
         return true;
     }
 }

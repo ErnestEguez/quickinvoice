@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { facturacionService } from '../services/facturacionService'
 import { formatCurrency } from '../lib/utils'
 import { format } from 'date-fns'
@@ -8,6 +8,7 @@ import { Printer, ChevronLeft } from 'lucide-react'
 export function TicketPrint() {
     const { id } = useParams()
     const navigate = useNavigate()
+    const [searchParams] = useSearchParams()
     const [factura, setFactura] = useState<any>(null)
     const [loading, setLoading] = useState(true)
 
@@ -20,6 +21,12 @@ export function TicketPrint() {
             setLoading(true)
             const data = await facturacionService.getComprobanteCompleto(id!)
             setFactura(data)
+
+            if (searchParams.get('auto') === 'true') {
+                setTimeout(() => {
+                    window.print()
+                }, 800)
+            }
         } catch (error) {
             console.error('Error loading ticket:', error)
         } finally {
@@ -44,6 +51,7 @@ export function TicketPrint() {
 
             {/* Ticket 80mm */}
             <div className="mx-auto bg-white p-[5mm] w-[80mm] font-mono text-[10px] leading-tight text-black print:p-0 print:shadow-none">
+                <style dangerouslySetInnerHTML={{ __html: '@page { size: 80mm auto; margin: 0; }' }} />
                 {/* Header Logos */}
                 <div className="flex justify-center mb-4">
                     {factura.empresas?.logo_url ? (

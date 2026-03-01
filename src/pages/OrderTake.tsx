@@ -161,6 +161,7 @@ export function OrderTake() {
 
         try {
             setSubmitting(true)
+            let confirmedPedidoId = ''
             if (existingPedido) {
                 if (cart.length > 0) {
                     await pedidoService.agregarItemsAPedido(
@@ -168,20 +169,29 @@ export function OrderTake() {
                         cart,
                         (existingPedido.total || 0) + total
                     )
+                    confirmedPedidoId = existingPedido.id
                     alert('¡Items agregados al pedido con éxito!')
                 } else {
                     console.log('No hay items nuevos para agregar. Volviendo a mesas...')
                 }
             } else {
-                await pedidoService.crearPedido(
+                const newPedido = await pedidoService.crearPedido(
                     mesaId,
                     actualUser.id,
                     actualEmpresa.id,
                     cart,
                     total
                 )
+                confirmedPedidoId = newPedido.id
                 alert('¡Pedido confirmado con éxito!')
             }
+
+            if (confirmedPedidoId) {
+                // Actualizar estado a En Preparación (Task 7)
+                await pedidoService.actualizarEstado(confirmedPedidoId, 'en_preparacion')
+                window.open(`/pedido/${confirmedPedidoId}/kitchen?auto=true`, '_blank')
+            }
+
             navigate('/mesas')
         } catch (error: any) {
             console.error('Error confirming pedido (Full Details):', error)

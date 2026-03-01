@@ -42,7 +42,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 // Componente para manejar la redirección del Dashboard inicial según rol
 function HomeRedirect() {
-  const { profile, loading } = useAuth()
+  const { loading } = useAuth()
 
   return (
     <div className="w-full">
@@ -50,8 +50,6 @@ function HomeRedirect() {
         <div className="flex items-center justify-center p-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
         </div>
-      ) : profile?.rol === 'admin_plataforma' ? (
-        <Navigate to="/configuracion" replace />
       ) : (
         <Dashboard />
       )}

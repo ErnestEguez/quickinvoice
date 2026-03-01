@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { facturacionService } from '../services/facturacionService'
-import { formatCurrency, cn } from '../lib/utils'
+import { formatCurrency, cn, validateIdentificacion } from '../lib/utils'
 import {
     Search,
     UserPlus,
@@ -14,6 +14,8 @@ import {
 import { useAuth } from '../contexts/AuthContext'
 import { useReactToPrint } from 'react-to-print'
 import { InvoiceTicketPOS } from './InvoiceTicketPOS'
+import { supabase } from '../lib/supabase'
+import { Loader2, Search as SearchIcon, Printer, CheckCircle2 } from 'lucide-react'
 
 interface BillingModalProps {
     isOpen: boolean
@@ -37,25 +39,19 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
         direccion: '',
         telefono: ''
     })
-
+    const [isSearchingSRI, setIsSearchingSRI] = useState(false)
     const [facturaFinal, setFacturaFinal] = useState<any>(null)
     const printRef = useRef<HTMLDivElement>(null)
 
     const handlePrint = useReactToPrint({
         contentRef: printRef,
-        documentTitle: `Factura_${facturaFinal?.secuencial}`,
+        documentTitle: `Factura_${facturaFinal?.secuencial || 'POS'}`,
     })
 
-    // Efecto para imprimir cuando la factura final esté lista
+    // Efecto para imprimir automaticamente cuando la factura final esté lista
     useEffect(() => {
         if (facturaFinal) {
             handlePrint()
-            // Resetear para futuras facturas en la misma sesión del modal
-            const timer = setTimeout(() => {
-                onSuccess(facturaFinal)
-                setFacturaFinal(null)
-            }, 500)
-            return () => clearTimeout(timer)
         }
     }, [facturaFinal])
 
@@ -119,6 +115,15 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
     const totalPagado = invoicePayments.reduce((acc, p) => acc + (Number(p.valor) || 0), 0)
 
     const handleSaveClient = async () => {
+        const id = newClient.identificacion.trim()
+        const validation = validateIdentificacion(id)
+
+        if (!validation.isValid) {
+            if (!confirm(`La identificación "${id}" no tiene 10 (Cédula) ni 13 (RUC) dígitos. ¿Es un Pasaporte?`)) {
+                return
+            }
+        }
+
         try {
             setIsSavingInvoice(true)
             const created = await facturacionService.createCliente({
@@ -135,6 +140,40 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
         }
     }
 
+    const lookupSRI = async () => {
+        const id = newClient.identificacion.trim()
+        if (!id) return
+
+        const validation = validateIdentificacion(id)
+        if (!validation.isValid) {
+            const isPassport = confirm(`La identificación "${id}" no tiene 10 (Cédula) ni 13 (RUC) dígitos.\n\n¿Es este un Pasaporte?`)
+            if (!isPassport) {
+                alert('Por favor, ingrese un documento válido (Cédula 10 dígitos o RUC 13 dígitos).')
+                return
+            }
+        }
+
+        try {
+            setIsSearchingSRI(true)
+            const { data, error } = await supabase.functions.invoke('sri-lookup', {
+                body: { identificacion: id }
+            })
+
+            if (error) throw error
+            const nombre = data?.nombreCompleto || data?.razonSocial
+            if (nombre) {
+                setNewClient(prev => ({ ...prev, nombre }))
+            } else if (data?.error) {
+                alert('No se encontró información para esta identificación en el SRI')
+            }
+        } catch (err) {
+            console.error('Error lookup SRI:', err)
+            alert('No se pudo consultar el SRI en este momento')
+        } finally {
+            setIsSearchingSRI(false)
+        }
+    }
+
     const handleExecuteInvoicing = async () => {
         if (!selectedClient) return alert('Seleccione un cliente')
         if (!cajaSesion) return alert('No hay una caja abierta para facturar')
@@ -147,7 +186,10 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
                 caja_sesion_id: cajaSesion.id
             })
 
-            // Obtener el comprobante completo con relaciones para imprimir
+            // Abrir el formato de ticket en una nueva ventana (comportamiento solicitado)
+            window.open(`/comprobante/${factura.id}/ticket?auto=true`, '_blank')
+
+            // Guardar para vista previa y botón de imprimir manual en caso de bloqueo de popup
             const facturaCompleta = await facturacionService.getComprobanteCompleto(factura.id)
             setFacturaFinal(facturaCompleta)
         } catch (error: any) {
@@ -197,13 +239,27 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
                         {isClientFormOpen ? (
                             <div className="bg-slate-50 p-4 rounded-xl border-2 border-primary-100 space-y-4 animate-in slide-in-from-top-2">
                                 <div className="grid grid-cols-2 gap-3">
-                                    <div className="col-span-2">
+                                    <div className="col-span-2 relative">
                                         <input
                                             placeholder="Identificación / RUC"
-                                            className="w-full px-4 py-2 rounded-lg border border-slate-200"
+                                            className="w-full px-4 py-2 rounded-lg border border-slate-200 pr-10"
                                             value={newClient.identificacion}
                                             onChange={(e) => setNewClient({ ...newClient, identificacion: e.target.value })}
+                                            onBlur={() => {
+                                                if (newClient.identificacion.length >= 10 && !newClient.nombre) {
+                                                    lookupSRI()
+                                                }
+                                            }}
                                         />
+                                        <button
+                                            type="button"
+                                            onClick={lookupSRI}
+                                            disabled={isSearchingSRI}
+                                            className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 hover:bg-slate-100 rounded text-primary-600"
+                                            title="Buscar en SRI"
+                                        >
+                                            {isSearchingSRI ? <Loader2 className="w-4 h-4 animate-spin" /> : <SearchIcon className="w-4 h-4" />}
+                                        </button>
                                     </div>
                                     <div className="col-span-2">
                                         <input
@@ -421,10 +477,49 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
                 </div>
             </div>
 
-            {/* Componente Oculto para Impresión POS */}
-            <div className="hidden">
-                <InvoiceTicketPOS ref={printRef} factura={facturaFinal} />
-            </div>
+            {/* Vista de Éxito y Previsualización de Impresión */}
+            {facturaFinal && (
+                <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-4 z-[60] overflow-y-auto">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-8 space-y-8 animate-in zoom-in-95 duration-300">
+                        <div className="text-center space-y-4">
+                            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <CheckCircle2 className="w-10 h-10" />
+                            </div>
+                            <h2 className="text-2xl font-black text-slate-900">¡Factura Generada!</h2>
+                            <p className="text-slate-500">El comprobante <strong>{facturaFinal.secuencial}</strong> se ha procesado con éxito.</p>
+                        </div>
+
+                        <div className="bg-slate-50 rounded-2xl p-6 flex flex-col items-center">
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Previsualización de Ticket</p>
+                            <div className="bg-white shadow-lg p-4 rounded border border-slate-100 max-h-96 overflow-y-auto w-full max-w-[80mm] mx-auto scale-90 origin-top">
+                                <InvoiceTicketPOS ref={printRef} factura={facturaFinal} />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <button
+                                onClick={handlePrint}
+                                className="flex items-center justify-center gap-2 bg-slate-900 text-white py-4 rounded-2xl font-bold hover:bg-slate-800 transition-all"
+                            >
+                                <Printer className="w-5 h-5" />
+                                Re-imprimir
+                            </button>
+                            <button
+                                onClick={() => {
+                                    onSuccess(facturaFinal)
+                                    onClose()
+                                }}
+                                className="bg-primary-600 text-white py-4 rounded-2xl font-bold hover:bg-primary-700 shadow-xl shadow-primary-200 transition-all"
+                            >
+                                Finalizar Cobro
+                            </button>
+                        </div>
+                        <p className="text-[10px] text-slate-400 text-center italic">
+                            Si la ventana de impresión no se abrió automáticamente, use el botón "Re-imprimir".
+                        </p>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

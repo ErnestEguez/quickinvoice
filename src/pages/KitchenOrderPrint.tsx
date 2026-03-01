@@ -66,6 +66,7 @@ export function KitchenOrderPrint() {
 
             {/* Ticket 80mm */}
             <div className="mx-auto bg-white p-[5mm] w-[80mm] font-mono text-[11px] leading-snug text-black print:p-0 print:shadow-none">
+                <style dangerouslySetInnerHTML={{ __html: '@page { size: 80mm auto; margin: 0; }' }} />
                 <div className="text-center space-y-1 mb-4 border-b-2 border-black pb-2">
                     <h1 className="text-sm font-black uppercase">ORDEN DE PREPARACIÓN</h1>
                     <p className="text-[14px] font-black">PEDIDO № {pedido.id.slice(0, 8)}</p>
