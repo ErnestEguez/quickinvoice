@@ -15,9 +15,11 @@ Es el administrador del local. Su responsabilidad es configurar el catálogo de 
 - Configuración de precios e impuestos (IVA 15%).
 - Gestión de inventarios (Kardex) para controlar el stock de insumos y bebidas.
 
-### C. Facturación y Cierre
-- Supervisión de las facturas emitidas.
-- Atención a clientes para emisión de facturas a nombre de personas naturales o empresas.
+### C. Facturación SRI y Cierres (Nuevos)
+- **Facturación Electrónica:** Al facturar, el sistema valida RUC/Cédula con el SRI.
+- **Detección Automática:** Si ingresa la identificación, el sistema completa el nombre automáticamente.
+- **Formatos:** El sistema imprime automáticamente el ticket de 80mm tras facturar.
+- **Cierre de Caja:** Al final del turno, realice el arqueo en la sección "Cierres". Debe cuadrar el efectivo, tarjetas y depósitos antes de cerrar la sesión.
 
 ## 3. Herramientas del Sistema
 - **Dashboard:** Estadísticas de ventas del día, pedidos activos y mesas ocupadas.

@@ -15,9 +15,15 @@ El mesero es el motor operacional del salón. El sistema está optimizado para u
 - Confirme el pedido. El sistema enviará automáticamente la comanda a cocina/barra.
 - La mesa cambiará a estado **Amarillo (Ocupada)**.
 
-### C. Servicio y Facturación
-- Una vez servidos los platos, puede marcar el estado como "Atendido".
-- Cuando el cliente solicite la cuenta, notifique al administrador para proceder a la facturación.
+### C. División de Cuentas (Novedad)
+- Si un grupo en una mesa desea pagar por separado, use la opción **"Dividir Cuenta"**.
+- Podrá seleccionar qué ítems van a un nuevo pedido independiente.
+- El sistema generará sub-pedidos vinculados a la misma mesa para facilitar el cobro individual.
+
+### D. Servicio y Facturación
+- Una vez servidos los platos, el estado cambia a "Atendido".
+- **Facturación Directa:** Si tiene permisos, puede usar el botón "Ir a Facturar Directo" para agilizar el cierre.
+- El sistema validará automáticamente la identificación (Cédula/RUC) conectándose al SRI.
 
 ## 3. Limitaciones de Seguridad (Importante)
 Para garantizar la integridad de la caja:

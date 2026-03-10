@@ -6,7 +6,7 @@ El Super Administrador es el encargado de gestionar la plataforma a nivel global
 ## 2. Funciones Principales
 
 ### A. Gestión de Empresas
-- **Visualización Global:** Puede ver el listado de todas las empresas que utilizan RestoFlow.
+- **Visualización Global:** Puede ver el listado de todas las empresas que utilizan QuickInvoice.
 - **Creación de Empresas:** Registro de nuevos RUCs, nombres comerciales y configuraciones base para cada restaurante.
 - **Edición de Datos Maestros:** Modificación de datos fiscales y parámetros de facturación global.
 
@@ -25,3 +25,4 @@ Al ingresar como Super Admin, el sistema redirige automáticamente a la sección
 
 ---
 > **Nota de Seguridad:** El Super Admin tiene permisos de lectura sobre toda la base de datos sin restricciones de empresa. Úselo con responsabilidad.
+

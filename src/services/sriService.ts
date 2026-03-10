@@ -20,39 +20,37 @@ export interface Comprobante {
 
 export const sriService = {
     async getComprobantes(empresaId: string, fecha?: string) {
+        // Para facturas directas pedido_id = null, evitamos el join a pedidos/mesas
         let query = supabase
             .from('comprobantes')
-            .select(`
-                *,
-                clientes(nombre),
-                pedidos(id, mesas(numero))
-            `)
+            .select('*, clientes(nombre, identificacion)')
             .eq('empresa_id', empresaId)
             .order('created_at', { ascending: false })
 
         if (fecha) {
-            // fecha comes as YYYY-MM-DD from the input[type=date]
+            // fecha viene como YYYY-MM-DD desde el input[type=date]
+            // Filtramos con el inicio y fin del día en formato ISO (timezone local)
             const [year, month, day] = fecha.split('-').map(Number)
-            // Create dates in local time
             const startOfDay = new Date(year, month - 1, day, 0, 0, 0, 0)
             const endOfDay = new Date(year, month - 1, day, 23, 59, 59, 999)
-
             query = query
                 .gte('created_at', startOfDay.toISOString())
                 .lte('created_at', endOfDay.toISOString())
+        } else {
+            // Sin filtro de fecha: mostrar el mes actual
+            const now = new Date()
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+            query = query.gte('created_at', startOfMonth.toISOString())
         }
 
         const { data, error } = await query
-
         if (error) throw error
 
-        return data.map((item: any) => ({
+        return (data || []).map((item: any) => ({
             ...item,
             cliente_nombre: item.clientes?.nombre || 'Consumidor Final',
             fecha: item.created_at,
-            pedido_info: {
-                mesa_numero: item.pedidos?.mesas?.numero
-            }
+            pedido_info: { mesa_numero: undefined }
         })) as Comprobante[]
     },
 
@@ -87,15 +85,18 @@ export const sriService = {
         return data.config_sri
     },
 
-    async uploadFirma(empresaId: string, file: File) {
-        const fileName = `${empresaId}_${Date.now()}.p12`
+    async uploadFirma(_empresaId: string, file: File) {
+        // Usar el nombre original del .p12 para que sea reutilizable entre empresas
+        // upsert=true sobreescribe si ya existe el mismo archivo
         const { data, error } = await supabase.storage
             .from('firmas_electronicas')
-            .upload(fileName, file, { upsert: true })
+            .upload(file.name, file, { upsert: true })
 
         if (error) throw error
-        return data.path
+        return data.path  // e.g. "mi_firma_2024.p12"
     },
+
+
 
     async uploadLogo(empresaId: string, file: File) {
         const fileName = `${empresaId}_logo_${Date.now()}.${file.name.split('.').pop()}`

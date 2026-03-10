@@ -1,21 +1,27 @@
 import { useAuth } from '../contexts/AuthContext'
 import {
     TrendingUp,
-    Users,
-    ShoppingCart,
-    Clock,
+    FileText,
+    Package,
+    DollarSign,
     ArrowUpRight,
-    ArrowDownRight,
     RefreshCw,
-    Database
+    CheckCircle,
+    Clock
 } from 'lucide-react'
 import { formatCurrency, cn } from '../lib/utils'
-import { seedService } from '../services/seedService'
-import { pedidoService } from '../services/pedidoService'
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
+import { format } from 'date-fns'
+import { es } from 'date-fns/locale'
 
-function StatCard({ label, value, icon: Icon, trend, trendValue }: any) {
+function StatCard({ label, value, icon: Icon, sub, color = 'primary' }: any) {
+    const colors: Record<string, string> = {
+        primary: 'bg-primary-50 text-primary-600',
+        green: 'bg-emerald-50 text-emerald-600',
+        amber: 'bg-amber-50 text-amber-600',
+        blue: 'bg-blue-50 text-blue-600',
+    }
     return (
         <div className="card p-6">
             <div className="flex items-start justify-between">
@@ -23,203 +29,186 @@ function StatCard({ label, value, icon: Icon, trend, trendValue }: any) {
                     <p className="text-sm font-medium text-slate-500">{label}</p>
                     <h3 className="text-2xl font-bold text-slate-900 mt-1">{value}</h3>
                 </div>
-                <div className="w-12 h-12 bg-primary-50 rounded-xl flex items-center justify-center text-primary-600">
+                <div className={cn('w-12 h-12 rounded-xl flex items-center justify-center', colors[color])}>
                     <Icon className="w-6 h-6" />
                 </div>
             </div>
-            <div className="mt-4 flex items-center gap-2">
-                <span className={cn(
-                    "flex items-center text-xs font-medium px-2 py-1 rounded-full",
-                    trend === 'up' ? "bg-emerald-50 text-emerald-600" : "bg-red-50 text-red-600"
-                )}>
-                    {trend === 'up' ? <ArrowUpRight className="w-3 h-3 mr-1" /> : <ArrowDownRight className="w-3 h-3 mr-1" />}
-                    {trendValue}
-                </span>
-                <span className="text-xs text-slate-400">vs ayer</span>
-            </div>
+            {sub && (
+                <div className="mt-4 flex items-center gap-2">
+                    <span className="flex items-center text-xs font-medium px-2 py-1 rounded-full bg-emerald-50 text-emerald-600">
+                        <ArrowUpRight className="w-3 h-3 mr-1" />
+                        {sub}
+                    </span>
+                    <span className="text-xs text-slate-400">hoy</span>
+                </div>
+            )}
         </div>
     )
 }
 
-
-
 export function Dashboard() {
-    const { empresa } = useAuth()
-    const [seeding, setSeeding] = useState(false)
+    const { empresa, profile } = useAuth()
+    const [loading, setLoading] = useState(true)
     const [stats, setStats] = useState({
-        totalVentas: 0,
-        pedidosActivos: 0,
-        mesasOcupadas: 0,
-        promedioTicket: 0
+        ventasHoy: 0,
+        facturasHoy: 0,
+        facturasAutorizadas: 0,
+        ticketPromedio: 0,
     })
-    const [recentPedidos, setRecentPedidos] = useState<any[]>([])
+    const [recentFacturas, setRecentFacturas] = useState<any[]>([])
 
     useEffect(() => {
         if (empresa?.id) {
-            loadDashboardData()
+            loadData()
         }
     }, [empresa?.id])
 
-    const loadDashboardData = async () => {
+    const loadData = async () => {
         if (!empresa?.id) return
+        setLoading(true)
         try {
-            const [s, p] = await Promise.all([
-                pedidoService.getEstadisticas(empresa.id),
-                pedidoService.getPedidosRecientes(5)
-            ])
-            setStats(s)
-            setRecentPedidos(p)
-        } catch {
-            // console.error('Error loading dashboard:', error)
+            // Inicio y fin del día actual
+            const hoy = new Date()
+            const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 0, 0, 0)
+            const fin = new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate(), 23, 59, 59)
+
+            const { data: comprobantes } = await supabase
+                .from('comprobantes')
+                .select('id, secuencial, total, estado_sri, created_at, clientes(nombre)')
+                .eq('empresa_id', empresa.id)
+                .gte('created_at', inicio.toISOString())
+                .lte('created_at', fin.toISOString())
+                .order('created_at', { ascending: false })
+
+            const all = comprobantes || []
+            const totalVentas = all.reduce((s: number, c: any) => s + (Number(c.total) || 0), 0)
+            const autorizadas = all.filter((c: any) => c.estado_sri === 'AUTORIZADO').length
+
+            setStats({
+                ventasHoy: totalVentas,
+                facturasHoy: all.length,
+                facturasAutorizadas: autorizadas,
+                ticketPromedio: all.length > 0 ? totalVentas / all.length : 0,
+            })
+            setRecentFacturas(all.slice(0, 8))
+        } catch (e) {
+            console.error('Dashboard load error:', e)
+        } finally {
+            setLoading(false)
         }
     }
 
-    const handleSeed = async () => {
-        if (!empresa?.id) return
-        try {
-            setSeeding(true)
-            await seedService.seedInitialData(empresa.id)
-            alert('¡Datos de prueba cargados exitosamente!')
-            loadDashboardData()
-        } catch {
-            alert('Error al cargar datos. Revisa la consola.')
-        } finally {
-            setSeeding(false)
-        }
+    // SuperAdmin no tiene empresa — mostrar mensaje
+    if (profile?.rol === 'admin_plataforma') {
+        return (
+            <div className="space-y-8">
+                <div>
+                    <h1 className="text-2xl font-bold text-slate-900">Panel de Administración</h1>
+                    <p className="text-slate-500 text-sm mt-1">Vista global de la plataforma QuickInvoice</p>
+                </div>
+                <div className="card p-12 text-center space-y-4">
+                    <div className="w-16 h-16 bg-primary-50 rounded-2xl flex items-center justify-center mx-auto">
+                        <TrendingUp className="w-8 h-8 text-primary-600" />
+                    </div>
+                    <h2 className="text-xl font-bold text-slate-900">Bienvenido, Administrador</h2>
+                    <p className="text-slate-500 max-w-md mx-auto">
+                        Desde aquí gestiona las empresas, usuarios y configuración global de la plataforma.
+                        Accede a <strong>Configuración</strong> para administrar las empresas registradas.
+                    </p>
+                </div>
+            </div>
+        )
     }
 
     return (
         <div className="space-y-8">
-            <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">Dashboard</h1>
-                    <p className="text-slate-500 text-sm">Resumen de operaciones de hoy</p>
+                    <p className="text-slate-500 text-sm">
+                        {empresa?.nombre} — {format(new Date(), "EEEE d 'de' MMMM yyyy", { locale: es })}
+                    </p>
                 </div>
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={loadDashboardData}
-                        className="p-2 hover:bg-white rounded-lg transition-colors text-slate-500 border border-slate-200"
-                        title="Refrescar Datos"
-                    >
-                        <RefreshCw className="w-5 h-5" />
-                    </button>
-                    {empresa?.id === 'demo' && (
-                        <button
-                            onClick={handleSeed}
-                            disabled={seeding}
-                            className="btn btn-secondary flex items-center gap-2"
-                        >
-                            <Database className="w-4 h-4" />
-                            {seeding ? 'Cargando...' : 'Cargar Datos Demo'}
-                        </button>
-                    )}
-                </div>
+                <button
+                    onClick={loadData}
+                    className="p-2 hover:bg-white rounded-lg transition-colors text-slate-500 border border-slate-200"
+                    title="Refrescar"
+                >
+                    <RefreshCw className="w-5 h-5" />
+                </button>
             </div>
 
+            {/* KPIs */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard
-                    label="Ventas del Día"
-                    value={formatCurrency(stats.totalVentas)}
-                    icon={TrendingUp}
-                    trend="up"
-                    trendValue="Hoy"
-                />
-                <StatCard
-                    label="Pedidos Activos"
-                    value={stats.pedidosActivos.toString()}
-                    icon={ShoppingCart}
-                    trend="up"
-                    trendValue="En proceso"
-                />
-                <StatCard
-                    label="Mesas Ocupadas"
-                    value={stats.mesasOcupadas.toString()}
-                    icon={Users}
-                    trend="up"
-                    trendValue="Ahora"
-                />
-                <StatCard
-                    label="Ticket Promedio"
-                    value={formatCurrency(stats.promedioTicket)}
-                    icon={Clock}
-                    trend="up"
-                    trendValue="Media"
-                />
+                <StatCard label="Ventas del Día" value={formatCurrency(stats.ventasHoy)} icon={DollarSign} color="green" sub={`${stats.facturasHoy} facturas`} />
+                <StatCard label="Facturas Emitidas" value={stats.facturasHoy.toString()} icon={FileText} color="primary" />
+                <StatCard label="Autorizadas SRI" value={stats.facturasAutorizadas.toString()} icon={CheckCircle} color="green" />
+                <StatCard label="Ticket Promedio" value={formatCurrency(stats.ticketPromedio)} icon={TrendingUp} color="amber" />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 card">
-                    <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                        <h2 className="font-bold text-slate-900">Ventas Recientes</h2>
-                        <button className="text-sm text-primary-600 font-medium hover:text-primary-700">Ver todo</button>
-                    </div>
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead>
-                                <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
-                                    <th className="px-6 py-4 font-medium">Pedido</th>
-                                    <th className="px-6 py-4 font-medium">Mesa</th>
-                                    <th className="px-6 py-4 font-medium">Estado</th>
-                                    <th className="px-6 py-4 font-medium text-right">Total</th>
+            {/* Tabla de facturas recientes */}
+            <div className="card">
+                <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+                    <h2 className="font-bold text-slate-900">Facturas de Hoy</h2>
+                    <span className="text-xs text-slate-400 font-medium">{stats.facturasHoy} registros</span>
+                </div>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wider">
+                                <th className="px-6 py-4 font-medium">Secuencial</th>
+                                <th className="px-6 py-4 font-medium">Cliente</th>
+                                <th className="px-6 py-4 font-medium">Hora</th>
+                                <th className="px-6 py-4 font-medium">Estado SRI</th>
+                                <th className="px-6 py-4 font-medium text-right">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {loading ? (
+                                <tr>
+                                    <td colSpan={5} className="px-6 py-8 text-center text-slate-400 italic">
+                                        Cargando...
+                                    </td>
                                 </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-100">
-                                {recentPedidos.length > 0 ? (
-                                    recentPedidos.map((pedido) => (
-                                        <tr key={pedido.id} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-6 py-4">
-                                                <p className="text-sm font-medium text-slate-900">#{pedido.id.slice(0, 8)}</p>
-                                                <p className="text-xs text-slate-500 font-normal">
-                                                    {new Date(pedido.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                </p>
-                                            </td>
-                                            <td className="px-6 py-4 text-sm text-slate-600">Mesa {pedido.mesas?.numero}</td>
-                                            <td className="px-6 py-4">
-                                                <span className={cn(
-                                                    "px-2 py-1 text-xs font-medium rounded-full",
-                                                    pedido.estado === 'atendido' ? "bg-emerald-50 text-emerald-600" :
-                                                        pedido.estado === 'pendiente' ? "bg-amber-50 text-amber-600" :
-                                                            "bg-blue-50 text-blue-600"
-                                                )}>
-                                                    {pedido.estado.charAt(0).toUpperCase() + pedido.estado.slice(1)}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4 text-sm font-bold text-slate-900 text-right">
-                                                {formatCurrency(pedido.total)}
-                                            </td>
-                                        </tr>
-                                    ))
-                                ) : (
-                                    <tr>
-                                        <td colSpan={4} className="px-6 py-8 text-center text-slate-500 italic">
-                                            No hay pedidos recientes
+                            ) : recentFacturas.length > 0 ? (
+                                recentFacturas.map((f) => (
+                                    <tr key={f.id} className="hover:bg-slate-50 transition-colors">
+                                        <td className="px-6 py-4 font-mono text-xs text-slate-600">{f.secuencial}</td>
+                                        <td className="px-6 py-4 text-sm font-medium text-slate-900">
+                                            {(f.clientes as any)?.nombre || 'Consumidor Final'}
+                                        </td>
+                                        <td className="px-6 py-4 text-xs text-slate-500">
+                                            {format(new Date(f.created_at), 'HH:mm')}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={cn(
+                                                'px-2 py-1 text-xs font-bold rounded-full flex items-center gap-1 w-fit',
+                                                f.estado_sri === 'AUTORIZADO'
+                                                    ? 'bg-emerald-50 text-emerald-700'
+                                                    : f.estado_sri === 'ENVIADO'
+                                                        ? 'bg-blue-50 text-blue-700'
+                                                        : 'bg-amber-50 text-amber-700'
+                                            )}>
+                                                {f.estado_sri === 'AUTORIZADO'
+                                                    ? <CheckCircle className="w-3 h-3" />
+                                                    : <Clock className="w-3 h-3" />}
+                                                {f.estado_sri || 'PENDIENTE'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm font-bold text-slate-900 text-right">
+                                            {formatCurrency(f.total)}
                                         </td>
                                     </tr>
-                                )}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div className="card p-6">
-                    <h2 className="font-bold text-slate-900 mb-6">Estado de Mesas</h2>
-                    <div className="space-y-4">
-                        {[
-                            { label: 'Ocupadas', count: stats.mesasOcupadas, color: 'bg-amber-500' },
-                            { label: 'Libres', count: 8 - stats.mesasOcupadas, color: 'bg-emerald-500' },
-                        ].map((status) => (
-                            <div key={status.label} className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                    <div className={cn("w-2 h-2 rounded-full", status.color)} />
-                                    <span className="text-sm text-slate-600">{status.label}</span>
-                                </div>
-                                <span className="text-sm font-bold text-slate-900">{status.count}</span>
-                            </div>
-                        ))}
-                    </div>
-                    <div className="mt-8 pt-6 border-t border-slate-100">
-                        <Link to="/mesas" className="btn btn-primary w-full block text-center">Ver Mapa de Salón</Link>
-                    </div>
+                                ))
+                            ) : (
+                                <tr>
+                                    <td colSpan={5} className="px-6 py-8 text-center text-slate-400 italic">
+                                        No hay facturas registradas hoy
+                                    </td>
+                                </tr>
+                            )}
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>

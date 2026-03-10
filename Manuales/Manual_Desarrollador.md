@@ -1,4 +1,4 @@
-# MANUAL DEL DESARROLLADOR: RESTOFLOW
+# MANUAL DEL DESARROLLADOR: QUICKINVOICE
 
 ## 1. Stack Tecnológico
 - **Frontend:** React + TypeScript + Vite.
@@ -44,3 +44,4 @@ En el frontend (`OrdersPage.tsx` y `MesaGrid.tsx`), los botones de cancelación 
 
 ---
 **Desarrollado con rigor técnico para Billennium Restaurantes.**
+

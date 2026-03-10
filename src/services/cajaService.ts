@@ -75,48 +75,40 @@ export const cajaService = {
      * Esto se usa para pre-llenar el cierre o para validar.
      */
     async calcularTotalesSesion(sesionId: string): Promise<ResumenCierre> {
-        // Obtenemos los comprobantes vinculados a esta sesión
         const { data: comprobantes, error } = await supabase
             .from('comprobantes')
-            .select(`
-        total,
-        comprobante_pagos (
-          metodo_pago,
-          valor
-        )
-      `)
+            .select('total, comprobante_pagos(metodo_pago, valor)')
             .eq('caja_sesion_id', sesionId);
 
         if (error) throw error;
 
-        const totales = {
+        const totales: ResumenCierre = {
             total_efectivo: 0,
             total_tarjetas: 0,
             total_transferencia: 0,
             total_otros: 0,
-            total_propina: 0 // Si tuvieramos campo propina en comprobante/pagos
+            total_propina: 0
         };
 
-        if (!comprobantes) return totales;
+        if (!comprobantes || comprobantes.length === 0) return totales;
+
+        console.log(`[Cierre] ${comprobantes.length} comprobante(s) en sesión ${sesionId}`);
 
         comprobantes.forEach(comp => {
-            // @ts-ignore
-            comp.comprobante_pagos?.forEach((pago: any) => {
+            (comp.comprobante_pagos as any[])?.forEach((pago: any) => {
                 const valor = Number(pago.valor) || 0;
-                const metodo = pago.metodo_pago?.toLowerCase() || '';
+                const metodo = (pago.metodo_pago || '').toLowerCase();
 
-                if (metodo.includes('efectivo')) {
+                if (metodo === 'efectivo') {
                     totales.total_efectivo += valor;
-                } else if (metodo.includes('tarjeta') || metodo.includes('crédito') || metodo.includes('débito')) {
+                } else if (metodo === 'tarjeta' || metodo === 'credito' || metodo.includes('tarjet')) {
                     totales.total_tarjetas += valor;
-                } else if (metodo.includes('transferencia')) {
+                } else if (metodo === 'transferencia' || metodo.includes('transfer')) {
                     totales.total_transferencia += valor;
                 } else {
-                    totales.total_otros += valor;
+                    totales.total_otros += valor; // cheque, otros
                 }
             });
-            // Sumar propina si existiera en el modelo (el usuario lo pidió en el reporte, asumimos que viene de algún lado o es cálculo manual)
-            // Por ahora 0.
         });
 
         return totales;
@@ -134,8 +126,8 @@ export const cajaService = {
                 total_efectivo: totales.total_efectivo,
                 total_tarjetas: totales.total_tarjetas,
                 total_transferencia: totales.total_transferencia,
-                total_otros: totales.total_otros,
-                total_propina: totales.total_propina
+                total_otros: totales.total_otros
+                // total_propina eliminado: columna no existe en caja_sesiones
             })
             .eq('id', sesionId);
 

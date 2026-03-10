@@ -2,8 +2,6 @@ import React from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import {
     LayoutDashboard,
-    UtensilsCrossed,
-    ClipboardList,
     Package,
     Users,
     FileText,
@@ -13,7 +11,10 @@ import {
     Menu,
     X,
     Truck,
-    BarChart3
+    BarChart3,
+    FilePlus,
+    Boxes,
+    BookOpen
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { cn } from '../lib/utils'
@@ -51,16 +52,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
     const navigation = [
         { to: '/configuracion', icon: Settings, label: 'Plataforma', roles: ['admin_plataforma'] },
-        { to: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['oficina', 'admin_plataforma'] },
-        { to: '/mesas', icon: UtensilsCrossed, label: 'Mesas', roles: ['oficina', 'mesero'] },
-        { to: '/pedidos', icon: ClipboardList, label: 'Pedidos', roles: ['oficina', 'mesero'] },
-        { to: '/productos', icon: Package, label: 'Productos', roles: ['oficina'] },
+        { to: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin_plataforma'] },
+        { to: '/nueva-factura', icon: FilePlus, label: 'Nueva Factura', roles: ['oficina'] },
+        { to: '/facturacion', icon: FileText, label: 'Comprobantes', roles: ['oficina'] },
         { to: '/clientes', icon: Users, label: 'Clientes', roles: ['oficina'] },
+        { to: '/productos', icon: Package, label: 'Productos', roles: ['oficina'] },
         { to: '/proveedores', icon: Truck, label: 'Proveedores', roles: ['oficina'] },
-        { to: '/inventario', icon: Package, label: 'Inventario', roles: ['oficina'] },
+        { to: '/inventario', icon: Boxes, label: 'Inventario', roles: ['oficina'] },
         { to: '/kardex', icon: BarChart3, label: 'Kardex', roles: ['oficina'] },
-        { to: '/cierres', icon: ClipboardList, label: 'Cierres de Caja', roles: ['oficina'] },
-        { to: '/facturacion', icon: FileText, label: 'Facturación', roles: ['oficina'] },
+        { to: '/cierres', icon: BookOpen, label: 'Cierres de Caja', roles: ['oficina'] },
         { to: '/configuracion', icon: Settings, label: 'Configuración', roles: ['oficina'] },
     ]
 
@@ -79,11 +79,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
                 <div className="flex flex-col h-full">
                     <div className="p-6 flex items-center gap-3 border-b border-slate-100">
                         <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center text-white font-bold">
-                            R
+                            Q
                         </div>
                         {isSidebarOpen && (
                             <span className="text-xl font-bold bg-gradient-to-r from-primary-600 to-primary-800 bg-clip-text text-transparent">
-                                RestoFlow
+                                QuickInvoice
                             </span>
                         )}
                     </div>

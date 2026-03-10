@@ -19,6 +19,7 @@ import { ProveedoresPage } from './pages/ProveedoresPage'
 import { InventarioPage } from './pages/InventarioPage'
 import { KardexPage } from './pages/KardexPage'
 import { CierresPage } from './pages/CierresPage'
+import { FacturaDirectaPage } from './pages/FacturaDirectaPage'
 import { ProtectedRoute as RoleProtectedRoute } from './components/ProtectedRoute'
 
 // Componente para proteger rutas (Auth simple)
@@ -42,7 +43,12 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 // Componente para manejar la redirección del Dashboard inicial según rol
 function HomeRedirect() {
-  const { loading } = useAuth()
+  const { loading, profile } = useAuth()
+
+  // Oficina va directo a nueva-factura como pantalla principal
+  if (!loading && profile?.rol === 'oficina') {
+    return <Navigate to="/nueva-factura" replace />
+  }
 
   return (
     <div className="w-full">
@@ -70,6 +76,16 @@ function App() {
                 <RoleProtectedRoute allowedRoles={['oficina', 'admin_plataforma']}>
                   <Layout>
                     <HomeRedirect />
+                  </Layout>
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/nueva-factura" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['oficina']}>
+                  <Layout>
+                    <FacturaDirectaPage />
                   </Layout>
                 </RoleProtectedRoute>
               </ProtectedRoute>

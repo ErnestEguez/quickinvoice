@@ -26,7 +26,7 @@ export function LoginPage() {
 
         // Validación de formato de email (para evitar que ingresen nombres o pines aquí)
         if (!email.includes('@')) {
-            setError('Por favor ingrese un EMAIL válido (ej: usuario@cafearoma.com). Si está intentando ingresar como Mesero con su PIN, primero debe iniciar sesión en el local con la cuenta de sucursal (ej: sucursal@restoflow.com).')
+            setError('Por favor ingrese un EMAIL válido (ej: usuario@quickinvoice.com).')
             setLoading(false)
             return
         }
@@ -57,10 +57,10 @@ export function LoginPage() {
             <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 border border-slate-200">
                 <div className="text-center mb-8">
                     <div className="w-16 h-16 bg-primary-600 rounded-2xl flex items-center justify-center text-white text-3xl font-bold mx-auto mb-4 shadow-lg shadow-primary-200">
-                        R
+                        Q
                     </div>
                     <h1 className="text-3xl font-bold text-slate-900">Bienvenido</h1>
-                    <p className="text-slate-500 mt-2">Ingresa a tu cuenta de RestoFlow</p>
+                    <p className="text-slate-500 mt-2">Ingresa a tu cuenta de QuickInvoice</p>
                 </div>
 
                 <form onSubmit={handleLogin} className="space-y-6">
@@ -136,7 +136,7 @@ export function LoginPage() {
                         ¿Problemas para entrar? Limpiar sesión y reintentar
                     </button>
                     <p className="text-[10px] text-slate-300">
-                        © 2026 RestoFlow. Sistema de Gestión Gastronómica.
+                        © 2026 QuickInvoice. Sistema de Facturación Electrónica.
                     </p>
                 </div>
             </div>

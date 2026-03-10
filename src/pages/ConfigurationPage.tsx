@@ -16,7 +16,6 @@ import {
     Percent,
     Image as ImageIcon,
     Loader2,
-    Grid,
     Utensils,
     RefreshCcw,
     X,
@@ -172,17 +171,45 @@ export function ConfigurationPage() {
     async function handleSaveEmpresaFull() {
         try {
             setSaving(true)
-            if (editingEmpresa.id) {
-                await supabase.from('empresas').update(editingEmpresa).eq('id', editingEmpresa.id)
-            } else {
-                await supabase.from('empresas').insert(editingEmpresa)
+
+            // ✅ Solo campos que existen en la tabla empresas del schema real
+            const payload: Record<string, any> = {
+                nombre: editingEmpresa.nombre || '',
+                ruc: editingEmpresa.ruc || '',
+                direccion: editingEmpresa.direccion || '',
+                telefono: editingEmpresa.telefono || null,
+                logo_url: editingEmpresa.logo_url || null,
+                config_sri: {
+                    ambiente: editingEmpresa.config_sri?.ambiente || 'PRUEBAS',
+                    establecimiento: editingEmpresa.config_sri?.establecimiento || '001',
+                    punto_emision: editingEmpresa.config_sri?.punto_emision || '001',
+                    secuencial_inicio: editingEmpresa.config_sri?.secuencial_inicio || 1,
+                    firma_path: editingEmpresa.config_sri?.firma_path || null,
+                    firma_url: editingEmpresa.config_sri?.firma_url || null,
+                    firma_password: editingEmpresa.config_sri?.firma_password || null,
+                    mail_user: editingEmpresa.config_sri?.mail_user || null,
+                    obligado_contabilidad: editingEmpresa.config_sri?.obligado_contabilidad || 'NO',
+                }
             }
+
+            let error
+            if (editingEmpresa.id) {
+                const result = await supabase.from('empresas').update(payload).eq('id', editingEmpresa.id)
+                error = result.error
+            } else {
+                const result = await supabase.from('empresas').insert(payload)
+                error = result.error
+            }
+
+            if (error) throw error
+
             setIsEmpresaModalOpen(false)
             setEditingEmpresa(null)
             loadData()
             alert('Empresa guardada con éxito')
         } catch (error: any) {
-            alert(`Error: ${error.message}`)
+            console.error('Error saving empresa:', error)
+            alert(`Error al guardar empresa: ${error.message}`)
         } finally {
             setSaving(false)
         }
@@ -192,15 +219,16 @@ export function ConfigurationPage() {
         e.preventDefault()
         try {
             setSaving(true)
+            // ✅ Solo campos que existen en la tabla empresas
             const { error } = await supabase
                 .from('empresas')
                 .update({
                     nombre: companyData.nombre,
                     ruc: companyData.ruc,
-                    direccion_matriz: companyData.direccion_matriz,
-                    logo_url: companyData.logo_url,
-                    config_iva: companyData.config_iva,
-                    config_propina: companyData.config_propina
+                    direccion: companyData.direccion || companyData.direccion_matriz || '',
+                    telefono: companyData.telefono || null,
+                    logo_url: companyData.logo_url || null,
+                    config_sri: companyData.config_sri || {}
                 })
                 .eq('id', empresa!.id)
 
@@ -437,159 +465,181 @@ export function ConfigurationPage() {
                         Empresa
                     </button>
                     <button
-                        onClick={() => setActiveTab('staff')}
+                        onClick={() => setActiveTab('categorias')}
                         className={cn(
                             "flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all",
-                            activeTab === 'staff' ? "bg-white text-primary-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
+                            activeTab === 'categorias' ? "bg-white text-primary-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
                         )}
                     >
-                        <Users className="w-4 h-4" />
-                        Personal
+                        <Tag className="w-4 h-4" />
+                        Categorías
                     </button>
-                    {profile?.rol === 'oficina' && (
-                        <button
-                            onClick={() => setActiveTab('mesas')}
-                            className={cn(
-                                "flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all",
-                                activeTab === 'mesas' ? "bg-white text-primary-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                            )}
-                        >
-                            <Grid className="w-4 h-4" />
-                            Mesas
-                        </button>
-                    )}
-                    {profile?.rol === 'oficina' && (
-                        <button
-                            onClick={() => setActiveTab('categorias')}
-                            className={cn(
-                                "flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-bold transition-all",
-                                activeTab === 'categorias' ? "bg-white text-primary-600 shadow-sm" : "text-slate-500 hover:text-slate-700"
-                            )}
-                        >
-                            <Tag className="w-4 h-4" />
-                            Categorías
-                        </button>
-                    )}
                 </div>
             )}
 
             {activeTab === 'empresa' ? (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in slide-in-from-bottom-4">
                     <div className="lg:col-span-2">
-                        <form onSubmit={handleSaveCompany} className="card p-8 space-y-8">
+                        <form onSubmit={handleSaveCompany} className="card p-8 space-y-6">
+                            {/* Encabezado */}
                             <div className="flex items-center gap-4 pb-4 border-b border-slate-100">
                                 <div className="p-3 bg-primary-50 text-primary-600 rounded-2xl">
                                     <Building2 className="w-6 h-6" />
                                 </div>
                                 <div>
-                                    <h2 className="text-lg font-bold text-slate-900">Datos Generales</h2>
-                                    <p className="text-sm text-slate-500">Información legal y visual del negocio</p>
+                                    <h2 className="text-lg font-bold text-slate-900">Datos de la Empresa</h2>
+                                    <p className="text-sm text-slate-500">Información legal y de contacto</p>
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
+                            {/* Campos principales */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-1">
                                     <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Razón Social</label>
                                     <input
                                         type="text"
                                         className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-primary-500"
-                                        value={companyData.nombre}
+                                        value={companyData.nombre || ''}
                                         onChange={e => setCompanyData({ ...companyData, nombre: e.target.value })}
                                     />
                                 </div>
-                                <div className="space-y-2">
+                                <div className="space-y-1">
                                     <label className="text-xs font-black text-slate-400 uppercase tracking-widest">RUC</label>
                                     <input
                                         type="text"
                                         className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-primary-500"
-                                        value={companyData.ruc}
+                                        value={companyData.ruc || ''}
                                         onChange={e => setCompanyData({ ...companyData, ruc: e.target.value })}
                                     />
                                 </div>
-                                <div className="md:col-span-2 space-y-2">
-                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Dirección Matriz</label>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Dirección</label>
                                     <input
                                         type="text"
                                         className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-primary-500"
-                                        value={companyData.direccion_matriz}
-                                        onChange={e => setCompanyData({ ...companyData, direccion_matriz: e.target.value })}
+                                        value={companyData.direccion || ''}
+                                        onChange={e => setCompanyData({ ...companyData, direccion: e.target.value })}
                                     />
                                 </div>
-                                <div className="md:col-span-2 space-y-2">
-                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                                        <ImageIcon className="w-3 h-3" /> Logo del Negocio
-                                    </label>
-                                    <div className="flex items-center gap-4 p-4 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
-                                        {companyData.logo_url ? (
-                                            <img src={companyData.logo_url} alt="Logo" className="w-20 h-20 object-contain rounded-lg border bg-white" />
-                                        ) : (
-                                            <div className="w-20 h-20 bg-slate-200 rounded-lg flex items-center justify-center text-slate-400">
-                                                <ImageIcon className="w-8 h-8" />
-                                            </div>
-                                        )}
-                                        <div className="flex-1">
-                                            <p className="text-sm font-bold text-slate-700">Subir nuevo logo</p>
-                                            <p className="text-xs text-slate-500 mb-3">Recomendado: PNG fondo transparente</p>
-                                            <input
-                                                type="file"
-                                                accept="image/*"
-                                                onChange={handleLogoUpload}
-                                                className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-black file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-4 pt-4 pb-4 border-b border-slate-100">
-                                <div className="p-3 bg-amber-50 text-amber-600 rounded-2xl">
-                                    <Percent className="w-6 h-6" />
-                                </div>
-                                <div>
-                                    <h2 className="text-lg font-bold text-slate-900">Impuestos y Servicios</h2>
-                                    <p className="text-sm text-slate-500">Valores aplicados a los pedidos</p>
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-2">
-                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">IVA por Defecto (%)</label>
-                                    <div className="flex gap-2">
-                                        {[0, 8, 15].map(v => (
-                                            <button
-                                                key={v}
-                                                type="button"
-                                                onClick={() => setCompanyData({ ...companyData, config_iva: v })}
-                                                className={cn(
-                                                    "flex-1 py-2 rounded-lg text-sm font-bold border transition-all",
-                                                    companyData.config_iva === v
-                                                        ? "bg-primary-50 border-primary-200 text-primary-600"
-                                                        : "bg-white border-slate-200 text-slate-500 hover:border-slate-300"
-                                                )}
-                                            >
-                                                {v}%
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Propina Sugerida (%)</label>
+                                <div className="space-y-1">
+                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Teléfono</label>
                                     <input
-                                        type="number"
+                                        type="text"
                                         className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-primary-500"
-                                        value={companyData.config_propina}
-                                        onChange={e => setCompanyData({ ...companyData, config_propina: parseFloat(e.target.value) })}
+                                        value={companyData.telefono || ''}
+                                        onChange={e => setCompanyData({ ...companyData, telefono: e.target.value })}
                                     />
                                 </div>
                             </div>
 
-                            <div className="pt-4">
+                            {/* Logo */}
+                            <div className="space-y-2">
+                                <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                    <ImageIcon className="w-3 h-3" /> Logo del Negocio
+                                </label>
+                                <div className="flex items-center gap-4 p-4 border-2 border-dashed border-slate-200 rounded-2xl bg-slate-50">
+                                    {companyData.logo_url ? (
+                                        <img src={companyData.logo_url} alt="Logo" className="w-20 h-20 object-contain rounded-lg border bg-white" />
+                                    ) : (
+                                        <div className="w-20 h-20 bg-slate-200 rounded-lg flex items-center justify-center text-slate-400">
+                                            <ImageIcon className="w-8 h-8" />
+                                        </div>
+                                    )}
+                                    <div className="flex-1">
+                                        <p className="text-sm font-bold text-slate-700">Subir nuevo logo</p>
+                                        <p className="text-xs text-slate-500 mb-3">Recomendado: PNG fondo transparente</p>
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={handleLogoUpload}
+                                            className="block w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-black file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Configuración SRI */}
+                            <div className="border-t border-slate-100 pt-6 space-y-4">
+                                <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                                    <Shield className="w-4 h-4 text-primary-500" />
+                                    Configuración SRI / Facturación Electrónica
+                                </h3>
+                                <div className="grid grid-cols-3 gap-4">
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Establecimiento</label>
+                                        <input
+                                            type="text" maxLength={3} placeholder="001"
+                                            className="w-full px-4 py-3 rounded-xl border font-mono"
+                                            value={companyData.config_sri?.establecimiento || ''}
+                                            onChange={e => setCompanyData({ ...companyData, config_sri: { ...(companyData.config_sri || {}), establecimiento: e.target.value } })}
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Punto Emisión</label>
+                                        <input
+                                            type="text" maxLength={3} placeholder="001"
+                                            className="w-full px-4 py-3 rounded-xl border font-mono"
+                                            value={companyData.config_sri?.punto_emision || ''}
+                                            onChange={e => setCompanyData({ ...companyData, config_sri: { ...(companyData.config_sri || {}), punto_emision: e.target.value } })}
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Ambiente</label>
+                                        <select
+                                            className="w-full px-4 py-3 rounded-xl border bg-white font-bold text-sm"
+                                            value={companyData.config_sri?.ambiente || 'PRUEBAS'}
+                                            onChange={e => setCompanyData({ ...companyData, config_sri: { ...(companyData.config_sri || {}), ambiente: e.target.value } })}
+                                        >
+                                            <option value="PRUEBAS">PRUEBAS</option>
+                                            <option value="PRODUCCION">PRODUCCIÓN</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                                            Firma (.p12)
+                                            {companyData.config_sri?.firma_path && (
+                                                <span className="ml-2 text-emerald-600 normal-case font-normal text-[11px]">
+                                                    ✅ {companyData.config_sri.firma_path}
+                                                </span>
+                                            )}
+                                        </label>
+                                        <input
+                                            type="file" accept=".p12"
+                                            className="w-full text-xs file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-black file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100"
+                                            onChange={async (e) => {
+                                                const file = e.target.files?.[0]
+                                                if (!file) return
+                                                try {
+                                                    const path = await sriService.uploadFirma(empresa!.id, file)
+                                                    setCompanyData({ ...companyData, config_sri: { ...(companyData.config_sri || {}), firma_path: path, firma_url: path } })
+                                                    alert(`✅ Firma "${file.name}" subida correctamente`)
+                                                } catch (err: any) {
+                                                    alert('Error al subir firma: ' + err.message)
+                                                }
+                                            }}
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Contraseña Firma</label>
+                                        <input
+                                            type="password" placeholder="••••••••"
+                                            className="w-full px-4 py-3 rounded-xl border"
+                                            value={companyData.config_sri?.firma_password || ''}
+                                            onChange={e => setCompanyData({ ...companyData, config_sri: { ...(companyData.config_sri || {}), firma_password: e.target.value } })}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="pt-2">
                                 <button
                                     type="submit"
                                     disabled={saving}
                                     className="btn btn-primary w-full py-4 text-lg font-black flex items-center justify-center gap-2"
                                 >
-                                    {saving ? <Loader2 className="w-6 h-6 animate-spin" /> : <><Save className="w-6 h-6" /> Guardar Todo</>}
+                                    {saving ? <Loader2 className="w-6 h-6 animate-spin" /> : <><Save className="w-6 h-6" /> Guardar Configuración</>}
                                 </button>
                             </div>
                         </form>
@@ -599,20 +649,30 @@ export function ConfigurationPage() {
                         <div className="card p-6 bg-primary-600 text-white">
                             <h3 className="font-bold flex items-center gap-2 mb-4">
                                 <Shield className="w-5 h-5 text-primary-200" />
-                                Resumen
+                                Datos Actuales
                             </h3>
-                            <div className="space-y-4 text-sm">
+                            <div className="space-y-3 text-sm">
                                 <div className="flex justify-between border-b border-primary-500 pb-2">
-                                    <span className="text-primary-100">IVA</span>
-                                    <span className="font-bold">{companyData.config_iva}%</span>
+                                    <span className="text-primary-100">RUC</span>
+                                    <span className="font-bold font-mono">{companyData.ruc || 'N/D'}</span>
                                 </div>
                                 <div className="flex justify-between border-b border-primary-500 pb-2">
-                                    <span className="text-primary-100">Propina</span>
-                                    <span className="font-bold">{companyData.config_propina}%</span>
+                                    <span className="text-primary-100">Ambiente SRI</span>
+                                    <span className={`font-bold ${companyData.config_sri?.ambiente === 'PRODUCCION' ? 'text-emerald-300' : 'text-amber-300'}`}>
+                                        {companyData.config_sri?.ambiente || 'PRUEBAS'}
+                                    </span>
                                 </div>
                                 <div className="flex justify-between pb-2">
-                                    <span className="text-primary-100">RUC</span>
-                                    <span className="font-bold">{companyData.ruc || 'N/D'}</span>
+                                    <span className="text-primary-100">Serie</span>
+                                    <span className="font-bold font-mono">
+                                        {companyData.config_sri?.establecimiento || '---'}-{companyData.config_sri?.punto_emision || '---'}
+                                    </span>
+                                </div>
+                                <div className="flex justify-between pb-2">
+                                    <span className="text-primary-100">Firma</span>
+                                    <span className="font-bold text-xs">
+                                        {companyData.config_sri?.firma_path ? '✅ Configurada' : '⚠ Sin firma'}
+                                    </span>
                                 </div>
                             </div>
                         </div>
@@ -800,9 +860,17 @@ export function ConfigurationPage() {
                                             nombre: '',
                                             ruc: '',
                                             direccion_matriz: '',
+                                            email: '',
+                                            telefono: '',
                                             config_iva: 15,
                                             config_propina: 10,
-                                            activo: true
+                                            activo: true,
+                                            config_sri: {
+                                                ambiente: 'PRUEBAS',
+                                                establecimiento: '001',
+                                                punto_emision: '001',
+                                                secuencial_inicio: 1
+                                            }
                                         })
                                         setIsEmpresaModalOpen(true)
                                     }}
@@ -1005,8 +1073,8 @@ export function ConfigurationPage() {
                                 </button>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                <div className="space-y-4">
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
                                         <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Nombre Comercial</label>
                                         <input
@@ -1024,83 +1092,136 @@ export function ConfigurationPage() {
                                         />
                                     </div>
                                     <div>
-                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Dirección Matriz</label>
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Dirección</label>
                                         <input
-                                            type="text" placeholder="Ciudad, Calle, Edificio..." className="w-full px-4 py-3 rounded-xl border mt-1"
-                                            value={editingEmpresa?.direccion_matriz || ''}
-                                            onChange={e => setEditingEmpresa({ ...editingEmpresa, direccion_matriz: e.target.value })}
+                                            type="text" placeholder="Ciudad, calle, número..." className="w-full px-4 py-3 rounded-xl border mt-1"
+                                            value={editingEmpresa?.direccion || ''}
+                                            onChange={e => setEditingEmpresa({ ...editingEmpresa, direccion: e.target.value })}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Teléfono</label>
+                                        <input
+                                            type="text" placeholder="+593 99 999 9999" className="w-full px-4 py-3 rounded-xl border mt-1"
+                                            value={editingEmpresa?.telefono || ''}
+                                            onChange={e => setEditingEmpresa({ ...editingEmpresa, telefono: e.target.value })}
                                         />
                                     </div>
                                 </div>
 
-                                <div className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest">IVA (%)</label>
-                                            <input
-                                                type="number" className="w-full px-4 py-3 rounded-xl border mt-1"
-                                                value={editingEmpresa?.config_iva || 15}
-                                                onChange={e => setEditingEmpresa({ ...editingEmpresa, config_iva: parseFloat(e.target.value) })}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Propina (%)</label>
-                                            <input
-                                                type="number" className="w-full px-4 py-3 rounded-xl border mt-1"
-                                                value={editingEmpresa?.config_propina || 10}
-                                                onChange={e => setEditingEmpresa({ ...editingEmpresa, config_propina: parseFloat(e.target.value) })}
-                                            />
-                                        </div>
-                                    </div>
+                                {/* Logo Upload */}
+                                <div>
+                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Logo (imagen)</label>
+                                    <input
+                                        type="file" accept="image/*"
+                                        className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 mt-2"
+                                        onChange={async (e) => {
+                                            const file = e.target.files?.[0]
+                                            if (!file || !editingEmpresa?.id) {
+                                                if (!editingEmpresa?.id) alert('Guarde la empresa primero para subir un logo.')
+                                                return
+                                            }
+                                            try {
+                                                const url = await sriService.uploadLogo(editingEmpresa.id, file)
+                                                setEditingEmpresa({ ...editingEmpresa, logo_url: url })
+                                            } catch (err: any) {
+                                                alert('Error al subir logo: ' + err.message)
+                                            }
+                                        }}
+                                    />
+                                </div>
+                            </div>
 
+
+                            {/* ── SECCIÓN CONFIGURACIÓN SRI ──────────────── */}
+                            <div className="border-t border-slate-100 pt-6 space-y-4">
+                                <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                                    <span className="w-2 h-2 bg-primary-500 rounded-full" />
+                                    Configuración SRI / Facturación Electrónica
+                                </h3>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div>
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Establecimiento</label>
+                                        <input
+                                            type="text" maxLength={3} placeholder="001"
+                                            className="w-full px-4 py-3 rounded-xl border mt-1 font-mono"
+                                            value={editingEmpresa?.config_sri?.establecimiento || ''}
+                                            onChange={e => setEditingEmpresa({
+                                                ...editingEmpresa,
+                                                config_sri: { ...(editingEmpresa?.config_sri || {}), establecimiento: e.target.value }
+                                            })}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Punto Emisión</label>
+                                        <input
+                                            type="text" maxLength={3} placeholder="001"
+                                            className="w-full px-4 py-3 rounded-xl border mt-1 font-mono"
+                                            value={editingEmpresa?.config_sri?.punto_emision || ''}
+                                            onChange={e => setEditingEmpresa({
+                                                ...editingEmpresa,
+                                                config_sri: { ...(editingEmpresa?.config_sri || {}), punto_emision: e.target.value }
+                                            })}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Ambiente</label>
                                         <select
-                                            className="w-full px-4 py-3 rounded-xl border mt-1 bg-white"
-                                            value={editingEmpresa?.activo === false ? 'inactivo' : 'activo'}
-                                            onChange={e => setEditingEmpresa({ ...editingEmpresa, activo: e.target.value === 'activo' })}
+                                            className="w-full px-4 py-3 rounded-xl border mt-1 bg-white font-bold text-sm"
+                                            value={editingEmpresa?.config_sri?.ambiente || 'PRUEBAS'}
+                                            onChange={e => setEditingEmpresa({
+                                                ...editingEmpresa,
+                                                config_sri: { ...(editingEmpresa?.config_sri || {}), ambiente: e.target.value }
+                                            })}
                                         >
-                                            <option value="activo">Activo</option>
-                                            <option value="inactivo">No Activo</option>
+                                            <option value="PRUEBAS">PRUEBAS</option>
+                                            <option value="PRODUCCION">PRODUCCIÓN</option>
                                         </select>
                                     </div>
-
-                                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl flex items-center justify-between">
-                                        <div>
-                                            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block">Funciones Extra</label>
-                                            <span className="text-sm font-bold text-slate-700">Dividir Cuentas</span>
-                                        </div>
-                                        <button
-                                            onClick={() => setEditingEmpresa({ ...editingEmpresa, habilitar_division_cuenta: !editingEmpresa?.habilitar_division_cuenta })}
-                                            className={cn(
-                                                "w-12 h-6 rounded-full transition-colors relative",
-                                                editingEmpresa?.habilitar_division_cuenta ? "bg-primary-600" : "bg-slate-300"
-                                            )}
-                                        >
-                                            <div className={cn(
-                                                "absolute top-1 w-4 h-4 bg-white rounded-full transition-all",
-                                                editingEmpresa?.habilitar_division_cuenta ? "left-7" : "left-1"
-                                            )} />
-                                        </button>
-                                    </div>
-
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
-                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Logo (Upload)</label>
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                                            Firma Electrónica (.p12)
+                                            {editingEmpresa?.config_sri?.firma_path && (
+                                                <span className="ml-2 text-emerald-600 normal-case font-normal">
+                                                    ✅ {editingEmpresa.config_sri.firma_path}
+                                                </span>
+                                            )}
+                                        </label>
                                         <input
-                                            type="file" accept="image/*"
-                                            className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 mt-2"
+                                            type="file" accept=".p12"
+                                            className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-xs file:font-black file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100 mt-1 cursor-pointer"
                                             onChange={async (e) => {
                                                 const file = e.target.files?.[0]
-                                                if (!file || !editingEmpresa?.id) {
-                                                    if (!editingEmpresa?.id) alert('Guarde la empresa primero para subir un logo.')
-                                                    return
-                                                }
+                                                if (!file) return
                                                 try {
-                                                    const url = await sriService.uploadLogo(editingEmpresa.id, file)
-                                                    setEditingEmpresa({ ...editingEmpresa, logo_url: url })
+                                                    const path = await sriService.uploadFirma(editingEmpresa?.id || 'new', file)
+                                                    setEditingEmpresa({
+                                                        ...editingEmpresa,
+                                                        config_sri: {
+                                                            ...(editingEmpresa?.config_sri || {}),
+                                                            firma_path: path,
+                                                            firma_url: path
+                                                        }
+                                                    })
+                                                    alert(`✅ Firma "${file.name}" subida correctamente`)
                                                 } catch (err: any) {
-                                                    alert('Error al subir logo: ' + err.message)
+                                                    alert('Error al subir firma: ' + err.message)
                                                 }
                                             }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Contraseña de la Firma</label>
+                                        <input
+                                            type="password" placeholder="••••••••"
+                                            className="w-full px-4 py-3 rounded-xl border mt-1"
+                                            value={editingEmpresa?.config_sri?.firma_password || ''}
+                                            onChange={e => setEditingEmpresa({
+                                                ...editingEmpresa,
+                                                config_sri: { ...(editingEmpresa?.config_sri || {}), firma_password: e.target.value }
+                                            })}
                                         />
                                     </div>
                                 </div>
@@ -1120,6 +1241,7 @@ export function ConfigurationPage() {
                     </div>
                 )
             }
+
 
             {
                 isStaffModalOpen && (
@@ -1317,7 +1439,8 @@ export function ConfigurationPage() {
                             </div>
                         </div>
                     </div>
-                )}
-        </div>
+                )
+            }
+        </div >
     )
 }

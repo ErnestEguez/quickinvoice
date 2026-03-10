@@ -1,31 +1,41 @@
-# PRESENTACIÓN DEL SISTEMA: RESTOFLOW
+# PRESENTACIÓN DEL SISTEMA: QUICKINVOICE
 
 ## 1. Visión General
-RestoFlow es una plataforma SaaS (Software as a Service) diseñada para la gestión integral de restaurantes y negocios gastronómicos. Su arquitectura permite manejar múltiples empresas de forma aislada bajo una única infraestructura tecnológica, optimizando procesos desde la toma de pedidos hasta la facturación electrónica.
+QUICKINVOICE es una plataforma SaaS (Software as a Service) diseñada para la gestión integral de restaurantes. Su arquitectura multi-empresa permite manejar múltiples negocios de forma aislada, optimizando procesos desde la toma de pedidos hasta la facturación electrónica bajo normativas ecuatorianas.
 
 ## 2. Fortalezas Principales
 
-### A. Seguridad de Grado Bancario (RLS)
-El sistema implementa **Row Level Security (RLS)** directamente en la base de datos PostgreSQL. Esto garantiza que la información de cada restaurante sea totalmente invisible para otros usuarios de la plataforma, incluso si comparten la misma infraestructura.
+### A. Seguridad de Datos (RLS)
+El sistema implementa **Row Level Security (RLS)** en PostgreSQL. La información de cada restaurante es totalmente invisible para los demás, garantizando total privacidad y cumplimiento de protección de datos.
 
-### B. Control de Fugas de Dinero
-Diseñado con una lógica estricta de jerarquías:
-- Los meseros **NO pueden cancelar pedidos** ni resetear mesas una vez que se ha iniciado un servicio.
-- Cualquier eliminación de ítems o anulación de mesas debe ser autorizada y ejecutada por el **Usuario Oficina** o el **Super Admin**.
-- Esto asegura que cada consumo en el salón termine obligatoriamente en una factura o sea debidamente justificado por la administración.
+### B. Control de Fugas y Auditoría
+- Los meseros **NO pueden cancelar pedidos** confirmados.
+- Solo el **Usuario Oficina** o el **Super Admin** pueden autorizar anulaciones.
+- Esto asegura que cada plato servido se transforme obligatoriamente en ingresos registrados.
 
 ### C. Gestión Visual e Intuitiva
-- **Plano de Mesas Interactiva:** Estados de mesa actualizados en tiempo real (Disponible, Ocupada, Atendida, Facturada).
-- **Flujo de Comanda:** Notificación automática a cocina para agilizar el servicio.
+- **Plano de Mesas Interactiva:** Estados de mesa en tiempo real.
+- **Flujo de Comanda:** Notificación automática a cocina.
 
-### D. Escalabilidad Multi-Empresa
-Permite al administrador global supervisar múltiples locales y empresas con una sola cuenta, facilitando la expansión del negocio.
+### D. Facturación Electrónica Nativa (SRI Ecuador)
+- **Validación Automática:** Conexión con el SRI para obtener nombres por RUC/Cédula.
+- **Flujo Completo:** Generación de XML firmado, envío automático por correo y almacenamiento seguro.
+- **Formato Ticket:** Impresión optimizada para ticketeras de 80mm.
+
+### E. Cierres de Caja y Sesiones
+- Control detallado de arqueos por cajeros y turnos.
+- Conciliación de Efectivo, Tarjetas y Transferencias.
+- Historial de cierres con trazabilidad total.
+
+### F. Escalabilidad Multi-Empresa
+- El Super Admin centralizado supervisa ingresos globales con Dashboards estadísticos en tiempo real.
 
 ## 3. Beneficios para el Negocio
-- Reducción de errores humanos en la facturación.
-- Eliminación de mermas financieras por pedidos "no registrados".
-- Reportes consolidados de ventas y rendimiento de personal.
-- Cumplimiento de normativas SRI (Facturación Electrónica).
+- Reducción de errores en facturación.
+- Eliminación de mermas financieras.
+- Cumplimiento 100% de normativas SRI.
+- Gestión ágil desde dispositivos móviles.
 
 ---
-**RestoFlow: Tecnología que fluye con tu negocio.**
+**QUICKINVOICE: Tecnología que fluye con tu negocio.**
+

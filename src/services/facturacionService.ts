@@ -101,9 +101,18 @@ export const facturacionService = {
     },
 
     async updateSriConfig(empresaId: string, config: Partial<SriConfig>) {
+        // Leer config actual primero para hacer MERGE (no sobreescribir)
+        const { data: current } = await supabase
+            .from('empresas')
+            .select('config_sri')
+            .eq('id', empresaId)
+            .single()
+
+        const merged = { ...(current?.config_sri || {}), ...config }
+
         const { error } = await supabase
             .from('empresas')
-            .update({ config_sri: config })
+            .update({ config_sri: merged })
             .eq('id', empresaId)
 
         if (error) throw error
