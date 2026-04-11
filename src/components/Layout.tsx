@@ -82,6 +82,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
     const navigation: NavItem[] = [
         { to: '/configuracion', icon: Settings, label: 'Plataforma', roles: ['admin_plataforma'] },
         { to: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin_plataforma'] },
+        { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', roles: ['oficina'] },
         { to: '/nueva-factura', icon: FilePlus, label: 'Nueva Factura', roles: ['oficina'] },
         { to: '/facturacion', icon: FileText, label: 'Comprobantes', roles: ['oficina'] },
         { to: '/clientes', icon: Users, label: 'Clientes', roles: ['oficina'] },

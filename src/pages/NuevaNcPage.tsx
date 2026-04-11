@@ -9,7 +9,7 @@ import { formatCurrency, cn } from '../lib/utils'
 import { format } from 'date-fns'
 import {
     Search, ChevronRight, ChevronLeft, AlertCircle,
-    CheckCircle2, Loader2, Printer, FileMinus, X, FileText, ExternalLink,
+    CheckCircle2, Loader2, Printer, FileMinus, X, FileText,
 } from 'lucide-react'
 
 type Step = 1 | 2 | 3 | 4  // 4 = éxito
@@ -71,7 +71,7 @@ export function NuevaNcPage() {
     const [motivoSri, setMotivoSri] = useState<'01' | '03' | '04'>('01')
     const [motivoDesc, setMotivoDesc] = useState('')
     const [items, setItems] = useState<ItemNC[]>([])
-    const [cantDevueltas, setCantDevueltas] = useState<Record<string, number>>({})
+
     const [errStep2, setErrStep2] = useState('')
 
     // ── Step 3: confirmación / procesamiento
@@ -117,7 +117,6 @@ export function NuevaNcPage() {
             ncService.getCantidadesDevueltas(f.id),
         ])
         setFacturaSeleccionada(full)
-        setCantDevueltas(devueltas)
         setItems(full.comprobante_detalles.map(d => {
             const yaDevuelta  = Number(devueltas[d.producto_id || ''] || 0)
             const maxDisponible = r2(Math.max(0, Number(d.cantidad) - yaDevuelta))
@@ -289,78 +288,6 @@ ${lineas}
         w.document.close()
         w.focus()
         setTimeout(() => { w.print(); w.close() }, 300)
-    }
-
-    // ─── Imprimir RIDE 80mm completo (logo texto + IVA desglosado) ───────────
-    function imprimirRidePdf() {
-        if (!ncCreada || !facturaSeleccionada) return
-        const ncDetalles = calcularDetallesNC(items)
-        const subSinIva  = r2(ncDetalles.reduce((s, d) => s + d.subtotal, 0))
-        const ivaTotal   = r2(ncDetalles.reduce((s, d) => s + d.iva_valor, 0))
-        const totalNc    = r2(subSinIva + ivaTotal)
-
-        const logoHtml = (empresa as any)?.logo_url
-            ? `<div style="text-align:center;margin-bottom:3px"><img src="${(empresa as any).logo_url}" style="max-height:30px;max-width:60mm" onerror="this.style.display='none'"></div>`
-            : ''
-
-        const filas = ncDetalles.map(d => `
-            <tr>
-              <td style="padding:1px 0">${d.nombre_producto.substring(0, 24).toUpperCase()}</td>
-              <td style="text-align:right;white-space:nowrap">${d.cantidad.toFixed(2)} x $${d.precio_unitario.toFixed(2)}</td>
-            </tr>
-            <tr>
-              <td style="padding-left:4px;color:#555">Sub: $${d.subtotal.toFixed(2)}  IVA${d.iva_porcentaje}%: $${d.iva_valor.toFixed(2)}</td>
-              <td style="text-align:right;font-weight:bold">$${d.total_linea.toFixed(2)}</td>
-            </tr>`).join('<tr><td colspan="2"><hr style="border:none;border-top:1px dotted #ccc;margin:1px 0"></td></tr>')
-
-        const w = window.open('', '_blank', 'width=320,height=750')!
-        w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"/>
-<title>RIDE NC ${ncCreada.secuencial}</title>
-<style>
-*{margin:0;padding:0;box-sizing:border-box;}
-body{width:80mm;padding:3mm;font-family:Arial,sans-serif;font-size:9px;}
-.center{text-align:center;}
-.bold{font-weight:bold;}
-.hr{border-top:1px dashed #000;margin:3px 0;}
-.hr2{border-top:2px solid #000;margin:3px 0;}
-table{width:100%;border-collapse:collapse;}
-td{vertical-align:top;}
-@media print{@page{size:80mm auto;margin:0}body{padding:2mm;}}
-</style></head><body>
-${logoHtml}
-<div class="center bold" style="font-size:11px">${((empresa as any)?.razon_social || empresa?.nombre || 'EMPRESA').toUpperCase()}</div>
-<div class="center">RUC: ${(empresa as any)?.ruc || ''}</div>
-<div class="center" style="font-size:8px">${(empresa as any)?.direccion || ''}</div>
-<div class="hr2"></div>
-<div class="center bold" style="font-size:12px;border:1px solid #000;padding:2px;margin:3px 0">NOTA DE CRÉDITO</div>
-<table>
-  <tr><td class="bold">NC:</td><td style="text-align:right">${ncCreada.secuencial}</td></tr>
-  <tr><td>Factura:</td><td style="text-align:right">${facturaSeleccionada.secuencial}</td></tr>
-  <tr><td>Fecha:</td><td style="text-align:right">${format(new Date(), 'dd/MM/yyyy HH:mm')}</td></tr>
-</table>
-<div class="hr"></div>
-<div class="bold">Cliente:</div>
-<div>${(facturaSeleccionada.clientes.nombre || 'CONSUMIDOR FINAL').substring(0, 35).toUpperCase()}</div>
-<div style="font-size:8px">CI/RUC: ${facturaSeleccionada.clientes.identificacion}</div>
-<div class="hr"></div>
-<div class="bold">Motivo: ${(MOTIVOS_SRI.find(m => m.value === motivoSri)?.label || '').substring(0, 30)}</div>
-<div style="font-size:8px">${motivoDesc.substring(0, 60)}</div>
-<div class="hr"></div>
-<table>${filas}</table>
-<div class="hr2"></div>
-<table>
-  <tr><td>Subtotal s/IVA:</td><td style="text-align:right">$${subSinIva.toFixed(2)}</td></tr>
-  <tr><td>Total IVA:</td><td style="text-align:right">$${ivaTotal.toFixed(2)}</td></tr>
-  <tr><td class="bold" style="font-size:11px">TOTAL NC:</td><td style="text-align:right;font-weight:bold;font-size:11px">$${totalNc.toFixed(2)}</td></tr>
-</table>
-<div class="hr2"></div>
-<div style="font-size:8px;word-break:break-all">${ncCreada.autorizacion_numero || 'PENDIENTE: ' + ncCreada.estado_sri}</div>
-<div class="hr"></div>
-<div class="center" style="font-size:7px">Comprobante Electrónico — RIDE NC</div>
-</body></html>`)
-        w.document.close()
-        w.focus()
-        setTimeout(() => { w.print() }, 300)
     }
 
     // ─── Totales de la NC ──────────────────────────────────

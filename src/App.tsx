@@ -29,6 +29,7 @@ import { AnulacionFacturasPage } from './pages/AnulacionFacturasPage'
 import { NotasCreditoPage } from './pages/NotasCreditoPage'
 import { NuevaNcPage } from './pages/NuevaNcPage'
 import { NcRidePage } from './pages/NcRidePage'
+import { DashboardGerencialPage } from './pages/DashboardGerencialPage'
 import { ProtectedRoute as RoleProtectedRoute } from './components/ProtectedRoute'
 
 // Componente para proteger rutas (Auth simple)
@@ -54,9 +55,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 function HomeRedirect() {
   const { loading, profile } = useAuth()
 
-  // Oficina va directo a nueva-factura como pantalla principal
+  // Oficina va directo al dashboard gerencial como pantalla principal
   if (!loading && profile?.rol === 'oficina') {
-    return <Navigate to="/nueva-factura" replace />
+    return <Navigate to="/dashboard" replace />
   }
 
   return (
@@ -85,6 +86,16 @@ function App() {
                 <RoleProtectedRoute allowedRoles={['oficina', 'admin_plataforma']}>
                   <Layout>
                     <HomeRedirect />
+                  </Layout>
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/dashboard" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['oficina']}>
+                  <Layout>
+                    <DashboardGerencialPage />
                   </Layout>
                 </RoleProtectedRoute>
               </ProtectedRoute>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ncService } from '../services/ncService'
 import type { NotaCredito } from '../services/ncService'
@@ -18,7 +18,7 @@ const estadoColors: Record<string, string> = {
     AUTORIZADO: 'bg-emerald-100 text-emerald-700',
     RECHAZADO:  'bg-red-100 text-red-700',
 }
-const estadoIcons: Record<string, JSX.Element> = {
+const estadoIcons: Record<string, React.ReactElement> = {
     PENDIENTE:  <Clock        className="w-3 h-3" />,
     ENVIADO:    <Send         className="w-3 h-3" />,
     AUTORIZADO: <CheckCircle2 className="w-3 h-3" />,

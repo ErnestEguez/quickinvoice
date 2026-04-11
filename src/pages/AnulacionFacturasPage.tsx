@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import { formatCurrency } from '../lib/utils'
 import {
-    Search, X, AlertTriangle, CheckCircle2, Copy, Check,
+    Search, AlertTriangle, CheckCircle2, Copy, Check,
     ChevronDown, ChevronUp, Trash2, FileX,
 } from 'lucide-react'
 
@@ -135,7 +135,7 @@ export function AnulacionFacturasPage() {
         }
     }
 
-    async function revertirPago(pagoId: string, carteraId: string) {
+    async function revertirPago(pagoId: string, _carteraId: string) {
         if (!confirm('¿Revertir este pago? El saldo de la cartera se recalculará.')) return
         setRevirtiendoPago(pagoId)
         try {
@@ -285,7 +285,6 @@ export function AnulacionFacturasPage() {
                             {facturasFiltradas.map(f => {
                                 const isExp = expandedId === f.id
                                 const esAnulada = f.estado_sistema === 'ANULADA'
-                                const tienePagosF = (f.cartera?.pagos?.length ?? 0) > 0
                                 const puedeAnular = !esAnulada
 
                                 return (

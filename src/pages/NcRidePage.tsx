@@ -39,7 +39,6 @@ export function NcRidePage() {
     const detalles  = nc.notas_credito_detalle || []
     const origen    = nc.comprobante_origen    || {}
 
-    const subSinIva = detalles.reduce((s: number, d: any) => s + Number(d.subtotal  || 0), 0)
     const ivaTotal  = detalles.reduce((s: number, d: any) => s + Number(d.iva_valor || 0), 0)
 
     // Agrupar IVA por tasa

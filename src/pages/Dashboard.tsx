@@ -2,7 +2,6 @@ import { useAuth } from '../contexts/AuthContext'
 import {
     TrendingUp,
     FileText,
-    Package,
     DollarSign,
     ArrowUpRight,
     RefreshCw,

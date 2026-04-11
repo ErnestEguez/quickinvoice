@@ -13,7 +13,6 @@ import {
     Trash2,
     Edit2,
     Shield,
-    Percent,
     Image as ImageIcon,
     Loader2,
     Utensils,
