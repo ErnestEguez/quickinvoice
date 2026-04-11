@@ -5,17 +5,24 @@ export interface Categoria {
     empresa_id: string
     nombre: string
     tipo?: string
+    descripcion?: string
+    activo?: boolean
     created_at?: string
 }
 
 export const categoriaService = {
-    async getCategorias(empresaId: string) {
-        const { data, error } = await supabase
+    async getCategorias(empresaId: string, incluirInactivas = false) {
+        let query = supabase
             .from('categorias')
             .select('*')
             .eq('empresa_id', empresaId)
             .order('nombre', { ascending: true })
 
+        if (!incluirInactivas) {
+            query = query.neq('activo', false)
+        }
+
+        const { data, error } = await query
         if (error) throw error
         return data as Categoria[]
     },
@@ -23,7 +30,7 @@ export const categoriaService = {
     async createCategoria(categoria: Partial<Categoria>) {
         const { data, error } = await supabase
             .from('categorias')
-            .insert(categoria)
+            .insert({ ...categoria, activo: true })
             .select()
             .single()
 
@@ -43,6 +50,17 @@ export const categoriaService = {
         return data as Categoria
     },
 
+    async darBajaCategoria(id: string) {
+        const { error } = await supabase
+            .from('categorias')
+            .update({ activo: false })
+            .eq('id', id)
+
+        if (error) throw error
+        return true
+    },
+
+    // Mantener por compatibilidad (eliminación física real)
     async deleteCategoria(id: string) {
         const { error } = await supabase
             .from('categorias')

@@ -8,11 +8,13 @@ export interface Comprobante {
     fecha: string
     total: number
     estado_sri: 'PENDIENTE' | 'ENVIADO' | 'AUTORIZADO' | 'RECHAZADO'
+    estado_sistema?: 'VIGENTE' | 'ANULADA'
     clave_acceso: string | null
     pedido_id?: string
     tipo_comprobante: string
     observaciones_sri?: string | null
     autorizacion_numero?: string | null
+    motivo_anulacion?: string | null
     pedido_info?: {
         mesa_numero?: string
     }
@@ -117,7 +119,7 @@ export const sriService = {
     async consultarEstadoComprobante(id: string) {
         // Llamar a la Edge Function para consultar el estado real en el SRI
         try {
-            const { data, error } = await supabase.functions.invoke('sri-signer', {
+            const { data, error } = await supabase.functions.invoke('factura-electronica', {
                 body: { comprobante_id: id, solo_consulta: true }
             });
 
@@ -127,6 +129,20 @@ export const sriService = {
             console.error("Error al consultar estado:", e);
             return 'ERROR';
         }
+    },
+
+    async anularComprobante(id: string, motivo: string, usuarioId: string): Promise<void> {
+        const { error } = await supabase
+            .from('comprobantes')
+            .update({
+                estado_sistema: 'ANULADA',
+                fecha_anulacion: new Date().toISOString(),
+                motivo_anulacion: motivo,
+                usuario_anulacion: usuarioId,
+            })
+            .eq('id', id)
+
+        if (error) throw error
     },
 
     async descargarXml(comprobanteId: string, secuencial: string) {

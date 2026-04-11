@@ -20,16 +20,18 @@ import {
     Key,
     RotateCw,
     Printer,
-    Mail
+    Mail,
+    Ban
 } from 'lucide-react'
 import { format } from 'date-fns'
 
 import { useAuth } from '../contexts/AuthContext'
 
 export function InvoicingPage() {
-    const { empresa } = useAuth()
+    const { empresa, profile } = useAuth()
     const [comprobantes, setComprobantes] = useState<Comprobante[]>([])
     const [loading, setLoading] = useState(true)
+    const [anulando, setAnulando] = useState<string | null>(null) // id del comprobante
     const [search, setSearch] = useState('')
     const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
     const [sriConfig, setSriConfig] = useState<Partial<SriConfig>>({})
@@ -89,6 +91,21 @@ export function InvoicingPage() {
             alert('Error al actualizar la configuración')
         } finally {
             setLoading(false)
+        }
+    }
+
+    async function handleAnular(doc: Comprobante) {
+        const motivo = prompt(`Motivo de anulación para ${doc.secuencial}:\n(Requerido)`)
+        if (!motivo?.trim()) return
+        if (!confirm(`¿Anular definitivamente la factura ${doc.secuencial}?\nEsta acción no se puede revertir.`)) return
+        try {
+            setAnulando(doc.id)
+            await sriService.anularComprobante(doc.id, motivo.trim(), profile?.id || '')
+            await loadData()
+        } catch (e: any) {
+            alert('Error al anular: ' + e.message)
+        } finally {
+            setAnulando(null)
         }
     }
 
@@ -192,9 +209,16 @@ export function InvoicingPage() {
                         </thead>
                         <tbody className="divide-y divide-slate-100 bg-white">
                             {filtered.map((doc) => (
-                                <tr key={doc.id} className="hover:bg-slate-50/50 transition-colors group">
+                                <tr key={doc.id} className={cn("hover:bg-slate-50/50 transition-colors group", doc.estado_sistema === 'ANULADA' ? 'opacity-60 bg-red-50/30' : '')}>
                                     <td className="px-6 py-4 font-mono text-sm font-bold text-slate-900">
-                                        {doc.secuencial}
+                                        <div className="flex items-center gap-2">
+                                            {doc.secuencial}
+                                            {doc.estado_sistema === 'ANULADA' && (
+                                                <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-red-100 text-red-700 border border-red-200 uppercase tracking-widest">
+                                                    ANULADA
+                                                </span>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className="px-6 py-4">
                                         <p className="text-sm font-medium text-slate-900 line-clamp-1">{doc.cliente_nombre}</p>
@@ -235,16 +259,18 @@ export function InvoicingPage() {
                                                     onClick={async () => {
                                                         setLoading(true);
                                                         try {
-                                                            const { data, error } = await (supabase as any).functions.invoke('sri-signer', {
+                                                            const { data, error } = await (supabase as any).functions.invoke('factura-electronica', {
                                                                 body: { comprobante_id: doc.id }
                                                             });
                                                             if (error) throw error;
-                                                            if (data.authorized) {
-                                                                alert('¡Factura AUTORIZADA correctamente!');
-                                                            } else if (data.estado_sri === 'ENVIADO') {
-                                                                alert('El SRI aún está procesando el documento. Intente consultar el estado en unos minutos.');
+                                                            if (data?.authorized) {
+                                                                alert('¡Factura AUTORIZADA correctamente!\nNúmero: ' + (data.autorizacion_numero || ''));
+                                                            } else if (data?.estado_sri === 'ENVIADO') {
+                                                                alert('SRI en procesamiento. Reintente en 2 minutos.');
+                                                            } else if (data?.success === false) {
+                                                                alert('Error SRI: ' + (data.error || data.message || 'Sin detalle'));
                                                             } else {
-                                                                alert('Aún no autorizado: ' + (data.message || 'Sin mensaje'));
+                                                                alert('Aún no autorizado: ' + (data?.message || 'Sin mensaje'));
                                                             }
                                                         } catch (e: any) {
                                                             alert('Error de conexión: ' + e.message);
@@ -292,6 +318,19 @@ export function InvoicingPage() {
                                             <Link to={`/comprobante/${doc.id}/ticket?auto=true`} title="Imprimir Ticket" className="p-2 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-primary-600 transition-colors">
                                                 <Printer className="w-4 h-4" />
                                             </Link>
+                                            {doc.estado_sistema !== 'ANULADA' && (
+                                                <button
+                                                    onClick={() => handleAnular(doc)}
+                                                    disabled={anulando === doc.id}
+                                                    title="Anular factura"
+                                                    className="p-2 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-600 transition-colors"
+                                                >
+                                                    {anulando === doc.id
+                                                        ? <div className="w-4 h-4 border-2 border-red-400 border-t-transparent rounded-full animate-spin" />
+                                                        : <Ban className="w-4 h-4" />
+                                                    }
+                                                </button>
+                                            )}
                                         </div>
                                     </td>
                                 </tr>

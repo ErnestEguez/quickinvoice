@@ -15,7 +15,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { useReactToPrint } from 'react-to-print'
 import { InvoiceTicketPOS } from './InvoiceTicketPOS'
 import { supabase } from '../lib/supabase'
-import { Loader2, Search as SearchIcon, Printer, CheckCircle2 } from 'lucide-react'
+import { Loader2, Search as SearchIcon, Printer, CheckCircle2, Briefcase } from 'lucide-react'
+import { vendedorService, type Vendedor } from '../services/vendedorService'
 
 interface BillingModalProps {
     isOpen: boolean
@@ -31,6 +32,9 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
     const [selectedClient, setSelectedClient] = useState<any>(null)
     const [invoicePayments, setInvoicePayments] = useState<{ metodo: string, valor: number, referencia: string }[]>([])
     const [isSavingInvoice, setIsSavingInvoice] = useState(false)
+    const [vendedores, setVendedores] = useState<Vendedor[]>([])
+    const [selectedVendedorId, setSelectedVendedorId] = useState<string>('')
+    const [diasPlazoCredito, setDiasPlazoCredito] = useState<number>(30)
     const [isClientFormOpen, setIsClientFormOpen] = useState(false)
     const [newClient, setNewClient] = useState({
         identificacion: '',
@@ -63,11 +67,13 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
 
     async function loadInitialData() {
         try {
-            const [clientsList, consumidor] = await Promise.all([
+            const [clientsList, consumidor, vendedoresList] = await Promise.all([
                 facturacionService.getClientes(empresa!.id),
-                facturacionService.getConsumidorFinal(empresa!.id)
+                facturacionService.getConsumidorFinal(empresa!.id),
+                vendedorService.getVendedoresActivos(empresa!.id).catch(() => [])
             ])
             setClients(clientsList)
+            setVendedores(vendedoresList)
 
             // LÓGICA DE AUTO-IDENTIFICACION PARA PEDIDOS DIVIDIDOS
             if (pedido?.identificacion_cliente_mesa) {
@@ -183,7 +189,9 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
             const factura = await facturacionService.generarFacturaDesdePedido(pedido, {
                 clienteId: selectedClient.id,
                 pagos: invoicePayments,
-                caja_sesion_id: cajaSesion.id
+                caja_sesion_id: cajaSesion.id,
+                vendedor_id: selectedVendedorId || null,
+                dias_plazo_credito: diasPlazoCredito,
             })
 
             // Abrir el formato de ticket en una nueva ventana (comportamiento solicitado)
@@ -347,6 +355,45 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
                         )}
                     </div>
 
+                    {/* Vendedor */}
+                    <div className="space-y-3 pt-4 border-t border-slate-100">
+                        <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+                            <Briefcase className="w-4 h-4 text-slate-400" />
+                            Vendedor
+                        </label>
+                        <select
+                            className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                            value={selectedVendedorId}
+                            onChange={e => setSelectedVendedorId(e.target.value)}
+                        >
+                            <option value="">— Sin vendedor asignado —</option>
+                            {vendedores.map(v => (
+                                <option key={v.id} value={v.id}>
+                                    {v.nombre}{v.iniciales ? ` (${v.iniciales})` : ''}
+                                </option>
+                            ))}
+                        </select>
+
+                        {/* Plazo crédito — solo cuando algún pago es a crédito */}
+                        {invoicePayments.some(p => p.metodo === 'credito') && (
+                            <div className="flex items-center gap-2 bg-amber-50 border border-amber-100 rounded-xl p-3 animate-in fade-in">
+                                <CreditCard className="w-4 h-4 text-amber-600 shrink-0" />
+                                <span className="text-xs font-bold text-amber-700 whitespace-nowrap">Plazo crédito:</span>
+                                <select
+                                    className="flex-1 px-2 py-1.5 rounded-lg border border-amber-200 text-sm bg-white outline-none"
+                                    value={diasPlazoCredito}
+                                    onChange={e => setDiasPlazoCredito(Number(e.target.value))}
+                                >
+                                    <option value={15}>15 días</option>
+                                    <option value={30}>30 días</option>
+                                    <option value={45}>45 días</option>
+                                    <option value={60}>60 días</option>
+                                    <option value={90}>90 días</option>
+                                </select>
+                            </div>
+                        )}
+                    </div>
+
                     {/* Medios de Pago */}
                     <div className="space-y-4 pt-4 border-t border-slate-100">
                         <div className="flex items-center justify-between">
@@ -368,10 +415,12 @@ export function BillingModal({ isOpen, onClose, pedido, onSuccess }: BillingModa
                                         value={p.metodo}
                                         onChange={(e) => handlePaymentChange(i, 'metodo', e.target.value)}
                                     >
-                                        <option value="efectivo">Efectivo</option>
-                                        <option value="tarjeta">Tarjeta</option>
-                                        <option value="transferencia">Transferencia</option>
-                                        <option value="otros">Otros</option>
+                                        <option value="efectivo">💵 Efectivo</option>
+                                        <option value="tarjeta">💳 Tarjeta D/C</option>
+                                        <option value="transferencia">🏦 Transferencia</option>
+                                        <option value="credito">📄 Crédito</option>
+                                        <option value="cheque">✏️ Cheque</option>
+                                        <option value="otros">🔄 Otros</option>
                                     </select>
                                     <div className="flex-1 relative">
                                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">$</span>

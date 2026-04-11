@@ -95,7 +95,7 @@ SET
 WHERE ruc = '0907388268001';
 
 -- Si la empresa aún no existe (en pruebas locales), crearla de muestra:
-INSERT INTO public.empresas (ruc, nombre, razon_ñasocial, direccion, telefono, config_sri)
+INSERT INTO public.empresas (ruc, nombre, razon_social, direccion, telefono, config_sri)
 VALUES (
   '0907388268001',
   'Mi Restaurante',

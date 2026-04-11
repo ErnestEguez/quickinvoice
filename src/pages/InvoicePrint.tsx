@@ -74,18 +74,23 @@ export function InvoicePrint() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8 border-b-2 border-slate-100 pb-8 relative">
 
                     <div className="space-y-4">
-                        <div className="w-32 h-32 bg-white rounded-2xl flex items-center justify-center overflow-hidden border border-slate-200 p-2 shadow-sm print:border-none print:shadow-none bg-transparent">
+                        <div className="flex items-center">
                             {factura.empresas?.logo_url ? (
                                 <img
                                     src={factura.empresas.logo_url}
                                     alt="Logo Empresa"
-                                    className="w-full h-full object-contain print:block"
+                                    className="h-24 max-w-[200px] object-contain"
                                     crossOrigin="anonymous"
-                                    style={{ WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' } as any}
+                                    style={{
+                                        WebkitPrintColorAdjust: 'exact',
+                                        printColorAdjust: 'exact',
+                                        colorAdjust: 'exact'
+                                    } as any}
+                                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                                 />
                             ) : (
-                                <div className="text-primary-600 font-black text-3xl">
-                                    {factura.empresas?.nombre?.[0]}
+                                <div className="text-primary-700 font-black text-2xl uppercase">
+                                    {factura.empresas?.nombre}
                                 </div>
                             )}
                         </div>
@@ -158,19 +163,28 @@ export function InvoicePrint() {
                             <tr className="text-xs font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
                                 <th className="pb-4">Descripción</th>
                                 <th className="pb-4 text-center">Cant.</th>
-                                <th className="pb-4 text-right">Precio</th>
+                                <th className="pb-4 text-right">P.Unit S/IVA</th>
+                                <th className="pb-4 text-right">Subtotal</th>
+                                <th className="pb-4 text-right">IVA</th>
                                 <th className="pb-4 text-right">Total</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-50">
-                            {factura.pedidos?.pedido_detalles?.map((item: any) => (
-                                <tr key={item.id} className="text-sm">
-                                    <td className="py-4 font-bold text-slate-900">{item.productos?.nombre}</td>
-                                    <td className="py-4 text-center font-medium text-slate-500">{item.cantidad}</td>
-                                    <td className="py-4 text-right font-medium text-slate-500">{formatCurrency(item.precio_unitario)}</td>
-                                    <td className="py-4 text-right font-black text-slate-900">{formatCurrency(item.subtotal)}</td>
-                                </tr>
-                            ))}
+                            {(factura.comprobante_detalles || factura.pedidos?.pedido_detalles || []).map((item: any) => {
+                                const subtotalSinIva = Number(item.subtotal || 0)
+                                const ivaValor = Number(item.iva_valor ?? (subtotalSinIva * (Number(item.iva_porcentaje || 0) / 100)))
+                                const totalLinea = subtotalSinIva + ivaValor
+                                return (
+                                    <tr key={item.id} className="text-sm">
+                                        <td className="py-4 font-bold text-slate-900">{item.nombre_producto || item.productos?.nombre}</td>
+                                        <td className="py-4 text-center font-medium text-slate-500">{Number(item.cantidad).toFixed(2)}</td>
+                                        <td className="py-4 text-right font-medium text-slate-500">{formatCurrency(item.precio_unitario)}</td>
+                                        <td className="py-4 text-right font-medium text-slate-500">{formatCurrency(subtotalSinIva)}</td>
+                                        <td className="py-4 text-right font-medium text-slate-500">{formatCurrency(ivaValor)}</td>
+                                        <td className="py-4 text-right font-black text-slate-900">{formatCurrency(totalLinea)}</td>
+                                    </tr>
+                                )
+                            })}
                         </tbody>
                     </table>
                 </div>
@@ -222,32 +236,32 @@ export function InvoicePrint() {
                     <div className="space-y-3">
                         {/* Dinamyc Totals calculation */}
                         {(() => {
-                            const breakdown: Record<number, number> = {}
-                            factura.pedidos?.pedido_detalles?.forEach((det: any) => {
-                                const rate = det.productos?.iva_porcentaje || 0
-                                breakdown[rate] = (breakdown[rate] || 0) + (det.subtotal / (1 + rate / 100))
+                            // Calcular IVA desde comprobante_detalles (facturas directas) o pedido_detalles (pedidos)
+                            const detalles = factura.comprobante_detalles || factura.pedidos?.pedido_detalles || []
+                            const breakdown: Record<string, { base: number; iva: number }> = {}
+                            detalles.forEach((det: any) => {
+                                const rate = det.iva_porcentaje ?? det.productos?.iva_porcentaje ?? 0
+                                const base = det.subtotal || 0
+                                const iva = det.iva_valor ?? (base * rate / 100)
+                                const key = String(rate)
+                                if (!breakdown[key]) breakdown[key] = { base: 0, iva: 0 }
+                                breakdown[key].base += base
+                                breakdown[key].iva += iva
                             })
 
-                            return Object.entries(breakdown).map(([rate, base]) => (
-                                <div key={rate} className="flex justify-between items-center text-slate-500 font-medium">
-                                    <span>Subtotal {rate}%</span>
-                                    <span>{formatCurrency(base)}</span>
-                                </div>
-                            ))
-                        })()}
-
-                        {(() => {
-                            const totalIva = factura.pedidos?.pedido_detalles?.reduce((sum: number, det: any) => {
-                                const rate = det.productos?.iva_porcentaje || 0
-                                const base = det.subtotal / (1 + rate / 100)
-                                return sum + (det.subtotal - base)
-                            }, 0)
-
                             return (
-                                <div className="flex justify-between items-center text-slate-500 font-medium">
-                                    <span>IVA Total</span>
-                                    <span>{formatCurrency(totalIva)}</span>
-                                </div>
+                                <>
+                                    {Object.entries(breakdown).map(([rate, vals]) => (
+                                        <div key={rate} className="flex justify-between items-center text-slate-500 font-medium">
+                                            <span>Subtotal IVA {rate}%</span>
+                                            <span>{formatCurrency((vals as any).base)}</span>
+                                        </div>
+                                    ))}
+                                    <div className="flex justify-between items-center text-slate-500 font-medium">
+                                        <span>IVA Total</span>
+                                        <span>{formatCurrency(Object.values(breakdown).reduce((s: number, v: any) => s + v.iva, 0))}</span>
+                                    </div>
+                                </>
                             )
                         })()}
 

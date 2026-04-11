@@ -20,6 +20,15 @@ import { InventarioPage } from './pages/InventarioPage'
 import { KardexPage } from './pages/KardexPage'
 import { CierresPage } from './pages/CierresPage'
 import { FacturaDirectaPage } from './pages/FacturaDirectaPage'
+import { VendedoresPage } from './pages/VendedoresPage'
+import { CarteraCxcPage } from './pages/CarteraCxcPage'
+import { ConsultaVentasPage } from './pages/ConsultaVentasPage'
+import { ConsultaCarteraClientesPage } from './pages/ConsultaCarteraClientesPage'
+import { EstadoCuentaClientePage } from './pages/EstadoCuentaClientePage'
+import { AnulacionFacturasPage } from './pages/AnulacionFacturasPage'
+import { NotasCreditoPage } from './pages/NotasCreditoPage'
+import { NuevaNcPage } from './pages/NuevaNcPage'
+import { NcRidePage } from './pages/NcRidePage'
 import { ProtectedRoute as RoleProtectedRoute } from './components/ProtectedRoute'
 
 // Componente para proteger rutas (Auth simple)
@@ -195,6 +204,26 @@ function App() {
               </ProtectedRoute>
             } />
 
+            <Route path="/vendedores" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['oficina']}>
+                  <Layout>
+                    <VendedoresPage />
+                  </Layout>
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/cartera-cxc" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['oficina']}>
+                  <Layout>
+                    <CarteraCxcPage />
+                  </Layout>
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+
             <Route path="/comprobante/:id/print" element={
               <ProtectedRoute>
                 <InvoicePrint />
@@ -212,6 +241,68 @@ function App() {
                 <KitchenOrderPrint />
               </ProtectedRoute>
             } />
+
+            <Route path="/consultas/ventas" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['oficina']}>
+                  <Layout>
+                    <ConsultaVentasPage />
+                  </Layout>
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/consultas/cartera-clientes" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['oficina']}>
+                  <Layout>
+                    <ConsultaCarteraClientesPage />
+                  </Layout>
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/cartera/estado-cuenta" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['oficina']}>
+                  <Layout>
+                    <EstadoCuentaClientePage />
+                  </Layout>
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/anulacion-facturas" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['oficina']}>
+                  <Layout>
+                    <AnulacionFacturasPage />
+                  </Layout>
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/notas-credito" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['oficina']}>
+                  <Layout>
+                    <NotasCreditoPage />
+                  </Layout>
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/notas-credito/nueva" element={
+              <ProtectedRoute>
+                <RoleProtectedRoute allowedRoles={['oficina']}>
+                  <Layout>
+                    <NuevaNcPage />
+                  </Layout>
+                </RoleProtectedRoute>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/notas-credito/:id/ride" element={<NcRidePage />} />
 
             {/* Catch all */}
             <Route path="*" element={<Navigate to="/" replace />} />

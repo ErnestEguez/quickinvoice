@@ -15,8 +15,9 @@ import { formatCurrency, validateIdentificacion } from '../lib/utils'
 import {
     Search, UserPlus, Plus, Trash2, X, Save,
     CheckCircle2, Loader2, FilePlus, CreditCard,
-    Package, Printer, User
+    Package, Printer, User, Briefcase, ChevronDown, ChevronUp
 } from 'lucide-react'
+import { vendedorService, type Vendedor } from '../services/vendedorService'
 import { cn } from '../lib/utils'
 
 // ─────────────────────────────────────────────────────
@@ -51,6 +52,15 @@ export function FacturaDirectaPage() {
     const [newClient, setNewClient] = useState({ identificacion: '', nombre: '', email: '', direccion: '', telefono: '' })
     const [isSearchingSRI, setIsSearchingSRI] = useState(false)
     const [isSavingClient, setIsSavingClient] = useState(false)
+
+    // Estado: vendedores
+    const [vendedores, setVendedores] = useState<Vendedor[]>([])
+    const [selectedVendedorId, setSelectedVendedorId] = useState<string>('')
+    const [diasPlazoCredito, setDiasPlazoCredito] = useState<number>(30)
+
+    // Estado: secciones colapsables
+    const [clienteCollapsed, setClienteCollapsed] = useState(false)
+    const [vendedorCollapsed, setVendedorCollapsed] = useState(false)
 
     // Estado: productos
     const [productos, setProductos] = useState<any[]>([])
@@ -87,13 +97,15 @@ export function FacturaDirectaPage() {
 
     async function loadData() {
         try {
-            const [clientsList, prodList, consumidor] = await Promise.all([
+            const [clientsList, prodList, consumidor, vendedoresList] = await Promise.all([
                 facturacionService.getClientes(empresa!.id),
                 supabase.from('productos').select('*').eq('empresa_id', empresa!.id).eq('activo', true).order('nombre'),
-                facturacionService.getConsumidorFinal(empresa!.id).catch(() => null)
+                facturacionService.getConsumidorFinal(empresa!.id).catch(() => null),
+                vendedorService.getVendedoresActivos(empresa!.id).catch(() => [])
             ])
             setClientes(clientsList)
             setProductos(prodList.data || [])
+            setVendedores(vendedoresList)
             if (consumidor) setSelectedCliente(consumidor)
         } catch (e) {
             console.error('Error cargando datos:', e)
@@ -208,7 +220,9 @@ export function FacturaDirectaPage() {
                 cliente_id: selectedCliente.id,
                 detalles: detallesValidos,
                 pagos: pagos.filter(p => p.valor > 0),
-                caja_sesion_id: cajaSesion.id
+                caja_sesion_id: cajaSesion.id,
+                vendedor_id: selectedVendedorId || null,
+                dias_plazo_credito: diasPlazoCredito,
             })
 
             // Cargar factura completa para imprimir automáticamente
@@ -228,6 +242,8 @@ export function FacturaDirectaPage() {
         setMontoRecibido(0)
         setSearchCliente('')
         setSearchProducto({})
+        setSelectedVendedorId('')
+        setDiasPlazoCredito(30)
         const cf = clientes.find(c => c.identificacion === '9999999999999')
         setSelectedCliente(cf || null)
     }
@@ -256,91 +272,191 @@ export function FacturaDirectaPage() {
                 <div className="xl:col-span-2 space-y-6">
 
                     {/* ── SECCIÓN CLIENTE ─────────────── */}
-                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 space-y-4">
-                        <div className="flex items-center justify-between">
-                            <h2 className="font-bold text-slate-900 flex items-center gap-2">
-                                <User className="w-5 h-5 text-primary-500" /> Cliente
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        {/* Header siempre visible */}
+                        <div
+                            className="flex items-center justify-between px-5 py-3 cursor-pointer select-none hover:bg-slate-50 transition-colors"
+                            onClick={() => !isClientFormOpen && setClienteCollapsed(c => !c)}
+                        >
+                            <h2 className="font-bold text-slate-900 flex items-center gap-2 text-sm">
+                                <User className="w-4 h-4 text-primary-500" /> Cliente
+                                {clienteCollapsed && selectedCliente && (
+                                    <span className="font-semibold text-slate-700 ml-1">
+                                        — {selectedCliente.nombre}
+                                        <span className="text-slate-400 font-normal ml-1">({selectedCliente.identificacion})</span>
+                                    </span>
+                                )}
                             </h2>
-                            {!isClientFormOpen && (
-                                <button onClick={() => setIsClientFormOpen(true)}
-                                    className="text-primary-600 hover:text-primary-700 flex items-center gap-1 text-sm font-bold">
-                                    <UserPlus className="w-4 h-4" /> Nuevo cliente
-                                </button>
-                            )}
+                            <div className="flex items-center gap-3">
+                                {!clienteCollapsed && !isClientFormOpen && (
+                                    <button onClick={e => { e.stopPropagation(); setIsClientFormOpen(true) }}
+                                        className="text-primary-600 hover:text-primary-700 flex items-center gap-1 text-xs font-bold">
+                                        <UserPlus className="w-3.5 h-3.5" /> Nuevo
+                                    </button>
+                                )}
+                                {clienteCollapsed
+                                    ? <ChevronDown className="w-4 h-4 text-slate-400" />
+                                    : <ChevronUp className="w-4 h-4 text-slate-400" />}
+                            </div>
                         </div>
 
-                        {isClientFormOpen ? (
-                            <div className="bg-slate-50 rounded-xl border border-primary-100 p-4 space-y-3 animate-in slide-in-from-top-2">
-                                <div className="relative">
-                                    <input
-                                        placeholder="Identificación / RUC / Cédula"
-                                        className="w-full px-4 py-2 rounded-lg border border-slate-200 pr-10 text-sm"
-                                        value={newClient.identificacion}
-                                        onChange={e => setNewClient({ ...newClient, identificacion: e.target.value })}
-                                        onBlur={() => { if (newClient.identificacion.length >= 10 && !newClient.nombre) lookupSRI() }}
-                                    />
-                                    <button type="button" onClick={lookupSRI} disabled={isSearchingSRI}
-                                        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded text-primary-600 hover:bg-slate-100"
-                                        title="Consultar SRI">
-                                        {isSearchingSRI ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                                    </button>
-                                </div>
-                                <input placeholder="Nombre / Razón Social *" className="w-full px-4 py-2 rounded-lg border border-slate-200 text-sm"
-                                    value={newClient.nombre} onChange={e => setNewClient({ ...newClient, nombre: e.target.value })} />
-                                <div className="grid grid-cols-2 gap-3">
-                                    <input placeholder="Email" className="px-4 py-2 rounded-lg border border-slate-200 text-sm"
-                                        value={newClient.email} onChange={e => setNewClient({ ...newClient, email: e.target.value })} />
-                                    <input placeholder="Teléfono" className="px-4 py-2 rounded-lg border border-slate-200 text-sm"
-                                        value={newClient.telefono} onChange={e => setNewClient({ ...newClient, telefono: e.target.value })} />
-                                </div>
-                                <input placeholder="Dirección" className="w-full px-4 py-2 rounded-lg border border-slate-200 text-sm"
-                                    value={newClient.direccion} onChange={e => setNewClient({ ...newClient, direccion: e.target.value })} />
-                                <div className="flex gap-2 pt-1">
-                                    <button onClick={() => setIsClientFormOpen(false)}
-                                        className="flex-1 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold hover:bg-slate-50">Cancelar</button>
-                                    <button onClick={handleSaveClient} disabled={isSavingClient}
-                                        className="flex-1 py-2 bg-primary-600 text-white rounded-lg text-sm font-bold shadow-md shadow-primary-200 flex items-center justify-center gap-2 disabled:opacity-60">
-                                        {isSavingClient ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar'}
-                                    </button>
-                                </div>
+                        {/* Detalles cliente colapsado */}
+                        {clienteCollapsed && selectedCliente && (selectedCliente.direccion || selectedCliente.telefono || selectedCliente.email) && (
+                            <div className="px-5 pb-2 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-slate-500 border-t border-slate-50">
+                                {selectedCliente.direccion && <span>📍 {selectedCliente.direccion}</span>}
+                                {selectedCliente.telefono && <span>📞 {selectedCliente.telefono}</span>}
+                                {selectedCliente.email && <span>✉️ {selectedCliente.email}</span>}
                             </div>
-                        ) : (
-                            <div className="space-y-3">
-                                <div className="relative">
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                    <input type="text" placeholder="Buscar por identificación o nombre..."
-                                        className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary-500 outline-none text-sm"
-                                        value={searchCliente}
-                                        onChange={e => setSearchCliente(e.target.value)} />
-                                </div>
-                                {searchCliente && (
-                                    <div className="absolute z-20 w-full max-w-lg bg-white border border-slate-200 rounded-xl shadow-2xl max-h-56 overflow-y-auto">
-                                        {filteredClientes.map(c => (
-                                            <button key={c.id}
-                                                className="w-full px-4 py-3 text-left hover:bg-slate-50 flex justify-between items-center border-b border-slate-50 last:border-0 text-sm"
-                                                onClick={() => { setSelectedCliente(c); setSearchCliente('') }}>
-                                                <div>
-                                                    <p className="font-bold text-slate-900">{c.nombre}</p>
-                                                    <p className="text-xs text-slate-500">{c.identificacion}</p>
-                                                </div>
-                                                <User className="w-4 h-4 text-slate-300" />
+                        )}
+
+                        {/* Contenido expandido */}
+                        {!clienteCollapsed && (
+                            <div className="px-5 pb-5 space-y-3 border-t border-slate-50">
+                                {isClientFormOpen ? (
+                                    <div className="bg-slate-50 rounded-xl border border-primary-100 p-4 space-y-3 mt-3">
+                                        <div className="relative">
+                                            <input
+                                                placeholder="Identificación / RUC / Cédula"
+                                                className="w-full px-4 py-2 rounded-lg border border-slate-200 pr-10 text-sm"
+                                                value={newClient.identificacion}
+                                                onChange={e => setNewClient({ ...newClient, identificacion: e.target.value })}
+                                                onBlur={() => { if (newClient.identificacion.length >= 10 && !newClient.nombre) lookupSRI() }}
+                                            />
+                                            <button type="button" onClick={lookupSRI} disabled={isSearchingSRI}
+                                                className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded text-primary-600 hover:bg-slate-100"
+                                                title="Consultar SRI">
+                                                {isSearchingSRI ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
                                             </button>
-                                        ))}
-                                        {filteredClientes.length === 0 && (
-                                            <div className="px-4 py-3 text-sm text-slate-400">No se encontraron clientes</div>
+                                        </div>
+                                        <input placeholder="Nombre / Razón Social *" className="w-full px-4 py-2 rounded-lg border border-slate-200 text-sm"
+                                            value={newClient.nombre} onChange={e => setNewClient({ ...newClient, nombre: e.target.value })} />
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <input placeholder="Email" className="px-4 py-2 rounded-lg border border-slate-200 text-sm"
+                                                value={newClient.email} onChange={e => setNewClient({ ...newClient, email: e.target.value })} />
+                                            <input placeholder="Teléfono" className="px-4 py-2 rounded-lg border border-slate-200 text-sm"
+                                                value={newClient.telefono} onChange={e => setNewClient({ ...newClient, telefono: e.target.value })} />
+                                        </div>
+                                        <input placeholder="Dirección" className="w-full px-4 py-2 rounded-lg border border-slate-200 text-sm"
+                                            value={newClient.direccion} onChange={e => setNewClient({ ...newClient, direccion: e.target.value })} />
+                                        <div className="flex gap-2 pt-1">
+                                            <button onClick={() => setIsClientFormOpen(false)}
+                                                className="flex-1 py-2 bg-white border border-slate-200 rounded-lg text-sm font-bold hover:bg-slate-50">Cancelar</button>
+                                            <button onClick={handleSaveClient} disabled={isSavingClient}
+                                                className="flex-1 py-2 bg-primary-600 text-white rounded-lg text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-60">
+                                                {isSavingClient ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2 mt-3">
+                                        <div className="relative">
+                                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                            <input type="text" placeholder="Buscar por identificación o nombre..."
+                                                className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 focus:ring-2 focus:ring-primary-500 outline-none text-sm"
+                                                value={searchCliente}
+                                                onChange={e => setSearchCliente(e.target.value)} />
+                                        </div>
+                                        {searchCliente && (
+                                            <div className="absolute z-20 w-full max-w-lg bg-white border border-slate-200 rounded-xl shadow-2xl max-h-56 overflow-y-auto">
+                                                {filteredClientes.map(c => (
+                                                    <button key={c.id}
+                                                        className="w-full px-4 py-3 text-left hover:bg-slate-50 flex justify-between items-center border-b border-slate-50 last:border-0 text-sm"
+                                                        onClick={() => { setSelectedCliente(c); setSearchCliente(''); setClienteCollapsed(true) }}>
+                                                        <div>
+                                                            <p className="font-bold text-slate-900">{c.nombre}</p>
+                                                            <p className="text-xs text-slate-500">{c.identificacion}</p>
+                                                        </div>
+                                                        <User className="w-4 h-4 text-slate-300" />
+                                                    </button>
+                                                ))}
+                                                {filteredClientes.length === 0 && (
+                                                    <div className="px-4 py-3 text-sm text-slate-400">No se encontraron clientes</div>
+                                                )}
+                                            </div>
+                                        )}
+                                        {selectedCliente && (
+                                            <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-3">
+                                                <div className="flex items-start justify-between">
+                                                    <div>
+                                                        <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Seleccionado</p>
+                                                        <p className="font-black text-emerald-900 text-sm">{selectedCliente.nombre}</p>
+                                                        <p className="text-xs text-emerald-600">{selectedCliente.identificacion}</p>
+                                                    </div>
+                                                    <button onClick={() => setSelectedCliente(null)} className="text-emerald-400 hover:text-emerald-700 mt-0.5">
+                                                        <X className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                                {(selectedCliente.direccion || selectedCliente.telefono || selectedCliente.email) && (
+                                                    <div className="mt-2 pt-2 border-t border-emerald-100 flex flex-wrap gap-x-4 gap-y-0.5 text-xs text-emerald-700">
+                                                        {selectedCliente.direccion && <span>📍 {selectedCliente.direccion}</span>}
+                                                        {selectedCliente.telefono && <span>📞 {selectedCliente.telefono}</span>}
+                                                        {selectedCliente.email && <span>✉️ {selectedCliente.email}</span>}
+                                                    </div>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 )}
-                                {selectedCliente && (
-                                    <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 flex items-center justify-between">
-                                        <div>
-                                            <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest">Cliente Seleccionado</p>
-                                            <p className="font-black text-emerald-900">{selectedCliente.nombre}</p>
-                                            <p className="text-xs text-emerald-600">{selectedCliente.identificacion}</p>
-                                        </div>
-                                        <button onClick={() => setSelectedCliente(null)} className="text-emerald-400 hover:text-emerald-700">
-                                            <X className="w-5 h-5" />
-                                        </button>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* ── SECCIÓN VENDEDOR ────────────── */}
+                    <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                        <div
+                            className="flex items-center justify-between px-5 py-3 cursor-pointer select-none hover:bg-slate-50 transition-colors"
+                            onClick={() => setVendedorCollapsed(c => !c)}
+                        >
+                            <h2 className="font-bold text-slate-900 flex items-center gap-2 text-sm">
+                                <Briefcase className="w-4 h-4 text-primary-500" /> Vendedor
+                                {vendedorCollapsed && selectedVendedorId && (
+                                    <span className="font-semibold text-slate-700 ml-1">
+                                        — {vendedores.find(v => v.id === selectedVendedorId)?.nombre || ''}
+                                    </span>
+                                )}
+                            </h2>
+                            {vendedorCollapsed ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronUp className="w-4 h-4 text-slate-400" />}
+                        </div>
+
+                        {!vendedorCollapsed && (
+                            <div className="px-5 pb-4 space-y-3 border-t border-slate-50">
+                                <div className="pt-3">
+                                    <select
+                                        className="w-full px-4 py-2.5 rounded-xl border border-slate-200 text-sm outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                                        value={selectedVendedorId}
+                                        onChange={e => { setSelectedVendedorId(e.target.value); if (e.target.value) setVendedorCollapsed(true) }}
+                                    >
+                                        <option value="">— Sin vendedor asignado —</option>
+                                        {vendedores.map(v => (
+                                            <option key={v.id} value={v.id}>
+                                                {v.nombre}{v.iniciales ? ` (${v.iniciales})` : ''}
+                                            </option>
+                                        ))}
+                                    </select>
+                                    {vendedores.length === 0 && (
+                                        <p className="text-xs text-slate-400 mt-1">No hay vendedores activos.</p>
+                                    )}
+                                </div>
+
+                                {/* Plazo de crédito — solo visible cuando hay pago a crédito */}
+                                {pagos.some(p => p.metodo === 'credito') && (
+                                    <div className="flex items-center gap-3 bg-amber-50 border border-amber-100 rounded-xl p-3">
+                                        <CreditCard className="w-5 h-5 text-amber-600 shrink-0" />
+                                        <label className="text-sm font-bold text-amber-800 whitespace-nowrap">
+                                            Plazo crédito
+                                        </label>
+                                        <select
+                                            className="flex-1 px-3 py-2 rounded-lg border border-amber-200 text-sm bg-white outline-none focus:ring-2 focus:ring-amber-400"
+                                            value={diasPlazoCredito}
+                                            onChange={e => setDiasPlazoCredito(Number(e.target.value))}
+                                >
+                                            <option value={15}>15 días</option>
+                                            <option value={30}>30 días</option>
+                                            <option value={45}>45 días</option>
+                                            <option value={60}>60 días</option>
+                                            <option value={90}>90 días</option>
+                                            <option value={120}>120 días</option>
+                                        </select>
                                     </div>
                                 )}
                             </div>
@@ -361,11 +477,11 @@ export function FacturaDirectaPage() {
 
                         {/* Encabezados tabla */}
                         <div className="hidden md:grid grid-cols-12 gap-2 px-2 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                            <div className="col-span-4">Descripción</div>
+                            <div className="col-span-3">Descripción</div>
                             <div className="col-span-2 text-center">Cantidad</div>
                             <div className="col-span-2 text-right">P. Unitario</div>
                             <div className="col-span-1 text-center">Desc%</div>
-                            <div className="col-span-1 text-center">IVA%</div>
+                            <div className="col-span-2 text-center">IVA%</div>
                             <div className="col-span-1 text-right">Total</div>
                             <div className="col-span-1" />
                         </div>
@@ -380,7 +496,7 @@ export function FacturaDirectaPage() {
                                 return (
                                     <div key={idx} className="relative grid grid-cols-12 gap-2 items-start bg-slate-50 rounded-xl p-3 border border-slate-100 animate-in fade-in">
                                         {/* Descripción */}
-                                        <div className="col-span-12 md:col-span-4 relative">
+                                        <div className="col-span-12 md:col-span-3 relative">
                                             <input
                                                 placeholder="Buscar producto o escribir descripción..."
                                                 className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm bg-white outline-none focus:ring-2 focus:ring-primary-400"
@@ -390,8 +506,20 @@ export function FacturaDirectaPage() {
                                                     updateLinea(idx, 'nombre_producto', e.target.value)
                                                     setProductDropdown(idx)
                                                 }}
-                                                onFocus={() => setProductDropdown(idx)}
-                                                onBlur={() => setTimeout(() => setProductDropdown(null), 200)}
+                                                onFocus={() => {
+                                                    // Al enfocar, limpiar búsqueda para mostrar todos los productos
+                                                    setSearchProducto(prev => ({ ...prev, [idx]: '' }))
+                                                    setProductDropdown(idx)
+                                                }}
+                                                onBlur={() => setTimeout(() => {
+                                                    setProductDropdown(null)
+                                                    // Si no se escribió nada, restaurar el nombre del producto seleccionado
+                                                    setSearchProducto(prev => {
+                                                        const updated = { ...prev }
+                                                        delete updated[idx]
+                                                        return updated
+                                                    })
+                                                }, 200)}
                                             />
                                             {productDropdown === idx && filtProd.length > 0 && (
                                                 <div className="absolute top-full left-0 right-0 z-30 mt-1 bg-white border border-slate-200 rounded-xl shadow-2xl max-h-48 overflow-y-auto">
@@ -438,7 +566,7 @@ export function FacturaDirectaPage() {
                                         </div>
 
                                         {/* IVA % */}
-                                        <div className="col-span-6 md:col-span-1">
+                                        <div className="col-span-6 md:col-span-2">
                                             <select
                                                 className="w-full px-2 py-2.5 rounded-lg border border-slate-200 text-sm text-center bg-white outline-none focus:ring-2 focus:ring-primary-400"
                                                 value={det.iva_porcentaje}

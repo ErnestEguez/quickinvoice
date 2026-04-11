@@ -24,6 +24,8 @@ export interface FacturaDirectaInput {
     pagos: PagoFactura[]
     caja_sesion_id?: string
     observaciones?: string
+    vendedor_id?: string | null      // FK a vendedores.id (puede ser null)
+    dias_plazo_credito?: number      // Solo aplica cuando hay pago a crédito; default 30
 }
 
 // Calcula los valores de una línea de detalle
@@ -58,7 +60,7 @@ export function calcularTotalesFactura(detalles: DetalleFacturaDirecta[]) {
 export const facturaDirectaService = {
 
     async generarFacturaDirecta(input: FacturaDirectaInput) {
-        const { empresa_id, cliente_id, detalles, pagos, caja_sesion_id } = input
+        const { empresa_id, cliente_id, detalles, pagos, caja_sesion_id, vendedor_id, dias_plazo_credito } = input
 
         // 1. Obtener configuración SRI
         const { data: empData } = await supabase
@@ -128,7 +130,8 @@ export const facturaDirectaService = {
                 estado_sri: 'PENDIENTE',
                 fecha_autorizacion: null,
                 sri_utilizacion_sistema_financiero: false,
-                caja_sesion_id: caja_sesion_id || null
+                caja_sesion_id: caja_sesion_id || null,
+                vendedor_id: vendedor_id || null
             })
             .select()
             .single()
@@ -176,6 +179,34 @@ export const facturaDirectaService = {
             if (errorPagos) console.error('Error insertando pagos:', errorPagos)
         }
 
+        // 6.1 Cartera CxC — solo cuando hay pago a crédito
+        const pagosCredito = pagos.filter(p => p.metodo === 'credito' && p.valor > 0)
+        if (pagosCredito.length > 0) {
+            const montoCredito = pagosCredito.reduce((sum, p) => sum + Number(p.valor), 0)
+            const diasPlazo = dias_plazo_credito ?? 30
+            const fechaEmision = new Date()
+            const fechaVencimiento = new Date(fechaEmision)
+            fechaVencimiento.setDate(fechaVencimiento.getDate() + diasPlazo)
+
+            const { error: errorCartera } = await supabase
+                .from('cartera_cxc')
+                .insert({
+                    empresa_id,
+                    cliente_id,
+                    comprobante_id: factura.id,
+                    fecha_emision: fechaEmision.toISOString().split('T')[0],
+                    fecha_vencimiento: fechaVencimiento.toISOString().split('T')[0],
+                    valor_original: montoCredito,
+                    saldo: montoCredito,
+                    estado: 'pendiente',
+                })
+
+            if (errorCartera) {
+                // No bloquea la factura; se registra para revisión manual
+                console.error('[cartera_cxc] Error al crear registro de cartera:', errorCartera)
+            }
+        }
+
         // 7. Actualizar secuencial en config_sri
         await supabase
             .from('empresas')
@@ -207,19 +238,19 @@ export const facturaDirectaService = {
             console.error('Error al registrar salida en Kardex:', kardexErr)
         }
 
-        // 9. Invocar Edge Function sri-signer
+        // 9. Invocar Edge Function factura-electronica
         try {
-            const { data: sriResult, error: sriErr } = await supabase.functions.invoke('sri-signer', {
+            const { data: sriResult, error: sriErr } = await supabase.functions.invoke('factura-electronica', {
                 body: { comprobante_id: factura.id }
             })
 
             if (sriErr) {
-                console.error('[sri-signer] Error:', sriErr)
+                console.error('[factura-electronica] Error:', sriErr)
             } else {
-                console.log('[sri-signer] Resultado:', sriResult)
+                console.log('[factura-electronica] Resultado:', sriResult)
             }
         } catch (edgeFnErr) {
-            console.error('[sri-signer] Excepción:', edgeFnErr)
+            console.error('[factura-electronica] Excepción:', edgeFnErr)
         }
 
         // 10. Retornar comprobante actualizado

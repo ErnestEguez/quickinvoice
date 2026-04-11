@@ -130,7 +130,6 @@ export function ConfigurationPage() {
                     .order('nombre')
 
                 if (!oficinaError && oficinaData) {
-                    // Enrich with empresa names manually to avoid join issues
                     const enrichedUsers = oficinaData.map(user => ({
                         ...user,
                         empresa: allEmpresas.find(e => e.id === user.empresa_id)
@@ -143,22 +142,59 @@ export function ConfigurationPage() {
 
             if (empresa?.id) {
                 console.log('Company Mode: Fetching data for', empresa.id);
-                const [empData, staffData, mesasData, categoriasData] = await Promise.all([
-                    supabase.from('empresas').select('*').eq('id', empresa!.id).single(),
-                    staffService.getStaffByEmpresa(empresa!.id),
-                    mesaService.getMesas(),
-                    categoriaService.getCategorias(empresa!.id)
-                ])
-                if (empData.data) setCompanyData(empData.data)
-                // Filter: No mostrar al propio usuario logueado en la lista de personal de servicio 
-                // si es rol oficina, para evitar confusiones.
-                const filteredStaff = staffData.filter(s =>
-                    s.rol !== 'admin_plataforma' &&
-                    s.id !== profile?.id
-                )
-                setStaff(filteredStaff)
-                setMesas(mesasData)
-                setCategorias(categoriasData)
+
+                // ── Cargar empresa (SIEMPRE, independiente) ──
+                try {
+                    const { data: empData, error: empError } = await supabase
+                        .from('empresas')
+                        .select('*')
+                        .eq('id', empresa!.id)
+                        .single()
+                    if (empError) console.error('Error cargando empresa:', empError)
+                    if (empData) setCompanyData(empData)
+                } catch (e) {
+                    console.error('Error cargando empresa:', e)
+                }
+
+                // ── Cargar staff (independiente) ──
+                try {
+                    const staffData = await staffService.getStaffByEmpresa(empresa!.id)
+                    const filteredStaff = staffData.filter(s =>
+                        s.rol !== 'admin_plataforma' &&
+                        s.id !== profile?.id
+                    )
+                    setStaff(filteredStaff)
+                } catch (e) {
+                    console.error('Error cargando staff:', e)
+                }
+
+                // ── Cargar mesas (independiente) ──
+                try {
+                    const mesasData = await mesaService.getMesas()
+                    setMesas(mesasData)
+                } catch (e) {
+                    console.error('Error cargando mesas:', e)
+                }
+
+                // ── Cargar categorías (independiente, con fallback) ──
+                try {
+                    const categoriasData = await categoriaService.getCategorias(empresa!.id)
+                    setCategorias(categoriasData)
+                } catch (e) {
+                    console.error('Error cargando categorías:', e)
+                    // Fallback: intentar sin filtro de activo
+                    try {
+                        const { data } = await supabase
+                            .from('categorias')
+                            .select('*')
+                            .eq('empresa_id', empresa!.id)
+                            .order('nombre')
+                        setCategorias(data || [])
+                    } catch (e2) {
+                        console.error('Error en fallback categorías:', e2)
+                        setCategorias([])
+                    }
+                }
             }
         } catch (error) {
             console.error('Error loading config:', error)
@@ -353,16 +389,20 @@ export function ConfigurationPage() {
     async function handleSaveCategoria() {
         try {
             setSaving(true)
-            if (!editingCategoria?.nombre) {
+            if (!editingCategoria?.nombre?.trim()) {
                 alert('El nombre es obligatorio')
                 return
             }
 
             if (editingCategoria.id) {
-                await categoriaService.updateCategoria(editingCategoria.id, editingCategoria)
+                // Al editar: solo actualizar campos editables, nunca tocar 'activo'
+                const { id, empresa_id, created_at, activo, ...updates } = editingCategoria as any
+                await categoriaService.updateCategoria(editingCategoria.id, updates)
             } else {
                 await categoriaService.createCategoria({
-                    ...editingCategoria,
+                    nombre: editingCategoria.nombre,
+                    tipo: editingCategoria.tipo || 'PRODUCTO',
+                    descripcion: editingCategoria.descripcion || '',
                     empresa_id: empresa!.id,
                 })
             }
@@ -377,13 +417,21 @@ export function ConfigurationPage() {
         }
     }
 
-    async function handleDeleteCategoria(id: string) {
-        if (!confirm('¿Estás seguro de eliminar esta categoría?')) return
+    async function handleBajaCategoria(id: string, nombre: string) {
+        if (!confirm(`¿Está seguro de dar de baja la categoría "${nombre}"? No se eliminará, quedará inactiva.`)) return
         try {
-            await categoriaService.deleteCategoria(id)
+            await categoriaService.darBajaCategoria(id)
             loadData()
         } catch (error: any) {
-            alert(`Error al eliminar categoría: ${error.message}`)
+            // Si la columna activo no existe aún en BD, fallback a delete
+            if (error.message?.includes('column') || error.message?.includes('activo')) {
+                if (confirm('La columna "activo" no existe en la BD. ¿Desea eliminar permanentemente?')) {
+                    await categoriaService.deleteCategoria(id)
+                    loadData()
+                }
+            } else {
+                alert(`Error al dar de baja: ${error.message}`)
+            }
         }
     }
 
@@ -504,12 +552,16 @@ export function ConfigurationPage() {
                                     />
                                 </div>
                                 <div className="space-y-1">
-                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">RUC</label>
+                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                                        RUC
+                                        <span className="normal-case font-normal text-[10px] bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full">No modificable</span>
+                                    </label>
                                     <input
                                         type="text"
-                                        className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-primary-500"
+                                        className="w-full px-4 py-3 rounded-xl border border-slate-100 bg-slate-50 text-slate-500 cursor-not-allowed font-mono"
                                         value={companyData.ruc || ''}
-                                        onChange={e => setCompanyData({ ...companyData, ruc: e.target.value })}
+                                        readOnly
+                                        tabIndex={-1}
                                     />
                                 </div>
                                 <div className="space-y-1">
@@ -593,6 +645,18 @@ export function ConfigurationPage() {
                                             <option value="PRUEBAS">PRUEBAS</option>
                                             <option value="PRODUCCION">PRODUCCIÓN</option>
                                         </select>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-1">
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Secuencial Inicial Facturas</label>
+                                        <input
+                                            type="number" min={1} placeholder="1"
+                                            className="w-full px-4 py-3 rounded-xl border font-mono"
+                                            value={companyData.config_sri?.secuencial_inicio || 1}
+                                            onChange={e => setCompanyData({ ...companyData, config_sri: { ...(companyData.config_sri || {}), secuencial_inicio: parseInt(e.target.value) || 1 } })}
+                                        />
+                                        <p className="text-[11px] text-slate-400">Número desde el cual inicia la secuencia si no hay facturas previas</p>
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
@@ -799,24 +863,51 @@ export function ConfigurationPage() {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                         {categorias.map(cat => (
-                            <div key={cat.id} className="card p-6 group relative hover:shadow-lg transition-all border-l-4 border-l-primary-500">
+                            <div key={cat.id} className={cn(
+                                "card p-6 group relative hover:shadow-lg transition-all border-l-4",
+                                cat.activo === false ? "border-l-slate-300 opacity-60" : "border-l-primary-500"
+                            )}>
+                                {/* Botones de acción */}
                                 <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => { setEditingCategoria(cat); setIsCategoriaModalOpen(true) }} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400">
+                                    <button
+                                        title="Editar"
+                                        onClick={() => { setEditingCategoria(cat); setIsCategoriaModalOpen(true) }}
+                                        className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-primary-600"
+                                    >
                                         <Edit2 className="w-4 h-4" />
                                     </button>
-                                    <button onClick={() => handleDeleteCategoria(cat.id)} className="p-1.5 hover:bg-slate-100 rounded-lg text-red-400">
-                                        <Trash2 className="w-4 h-4" />
-                                    </button>
+                                    {cat.activo !== false && (
+                                        <button
+                                            title="Dar de baja (inactivar)"
+                                            onClick={() => handleBajaCategoria(cat.id, cat.nombre)}
+                                            className="p-1.5 hover:bg-red-50 rounded-lg text-slate-400 hover:text-red-500"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    )}
                                 </div>
-                                <div className="space-y-1">
-                                    <h3 className="font-bold text-slate-900 text-lg uppercase tracking-tight">{cat.nombre}</h3>
-                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{cat.tipo || 'General'}</p>
+                                {/* Contenido */}
+                                <div className="space-y-2 pt-1">
+                                    <div className="flex items-start justify-between gap-2">
+                                        <h3 className="font-bold text-slate-900 text-base uppercase tracking-tight leading-tight">{cat.nombre}</h3>
+                                        {cat.activo === false && (
+                                            <span className="shrink-0 text-[9px] font-black bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full uppercase">Inactiva</span>
+                                        )}
+                                    </div>
+                                    <span className="inline-block text-[10px] font-black px-2 py-0.5 rounded-full bg-primary-50 text-primary-600 uppercase tracking-widest">
+                                        {cat.tipo || 'General'}
+                                    </span>
+                                    {cat.descripcion && (
+                                        <p className="text-xs text-slate-400 mt-1 line-clamp-2">{cat.descripcion}</p>
+                                    )}
                                 </div>
                             </div>
                         ))}
                         {categorias.length === 0 && (
-                            <div className="col-span-full py-12 text-center text-slate-400 font-medium">
-                                No hay categorías registradas.
+                            <div className="col-span-full py-16 text-center">
+                                <Tag className="w-12 h-12 text-slate-200 mx-auto mb-3" />
+                                <p className="text-slate-400 font-medium">No hay categorías registradas.</p>
+                                <p className="text-slate-300 text-sm mt-1">Crea la primera categoría con el botón de arriba.</p>
                             </div>
                         )}
                     </div>
@@ -1181,6 +1272,21 @@ export function ConfigurationPage() {
                                 </div>
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                     <div>
+                                        <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Secuencial Inicial Facturas</label>
+                                        <input
+                                            type="number" min={1} placeholder="1"
+                                            className="w-full px-4 py-3 rounded-xl border mt-1 font-mono"
+                                            value={editingEmpresa?.config_sri?.secuencial_inicio || 1}
+                                            onChange={e => setEditingEmpresa({
+                                                ...editingEmpresa,
+                                                config_sri: { ...(editingEmpresa?.config_sri || {}), secuencial_inicio: parseInt(e.target.value) || 1 }
+                                            })}
+                                        />
+                                        <p className="text-[11px] text-slate-400 mt-1">Número desde el cual inicia la secuencia si no hay facturas previas</p>
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
                                         <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
                                             Firma Electrónica (.p12)
                                             {editingEmpresa?.config_sri?.firma_path && (
@@ -1407,35 +1513,107 @@ export function ConfigurationPage() {
             }
             {
                 isCategoriaModalOpen && (
-                    <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm p-8 space-y-6">
-                            <h2 className="text-xl font-bold">{editingCategoria?.id ? 'Editar' : 'Nueva'} Categoría</h2>
+                    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+                        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-8 space-y-5 animate-in zoom-in-95 duration-200">
+                            {/* Header */}
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-primary-50 text-primary-600 rounded-xl">
+                                        <Tag className="w-5 h-5" />
+                                    </div>
+                                    <h2 className="text-xl font-bold text-slate-900">
+                                        {editingCategoria?.id ? 'Editar Categoría' : 'Nueva Categoría'}
+                                    </h2>
+                                </div>
+                                <button
+                                    onClick={() => { setIsCategoriaModalOpen(false); setEditingCategoria(null) }}
+                                    className="p-2 hover:bg-slate-100 rounded-full text-slate-400"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            {/* Campos */}
                             <div className="space-y-4">
-                                <div>
-                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Nombre de Categoría</label>
+                                {/* Nombre */}
+                                <div className="space-y-1">
+                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                                        Nombre de Categoría *
+                                    </label>
                                     <input
-                                        type="text" placeholder="Ej: Entradas, Bebidas, Postres..." className="w-full px-4 py-3 rounded-xl border mt-1 font-bold"
+                                        type="text"
+                                        placeholder="Ej: Herramientas, Materiales, Servicios..."
+                                        className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-primary-500 font-bold text-slate-900"
                                         value={editingCategoria?.nombre || ''}
                                         onChange={e => setEditingCategoria({ ...editingCategoria, nombre: e.target.value })}
                                         autoFocus
                                     />
                                 </div>
-                                <div>
+
+                                {/* Tipo */}
+                                <div className="space-y-1">
                                     <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Tipo</label>
                                     <select
-                                        className="w-full px-4 py-3 rounded-xl border mt-1 bg-white"
-                                        value={editingCategoria?.tipo || 'ALIMENTO'}
+                                        className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                                        value={editingCategoria?.tipo || 'PRODUCTO'}
                                         onChange={e => setEditingCategoria({ ...editingCategoria, tipo: e.target.value })}
                                     >
-                                        <option value="ALIMENTO">Restaurante / Alimentos</option>
-                                        <option value="BEBIDA">Bebidas / Bar</option>
-                                        <option value="OTROS">Otros</option>
+                                        <option value="PRODUCTO">📦 Producto / Mercadería</option>
+                                        <option value="SERVICIO">⚙️ Servicio</option>
+                                        <option value="ALIMENTO">🍲 Alimentos / Restaurante</option>
+                                        <option value="BEBIDA">🥤 Bebidas / Bar</option>
+                                        <option value="REPUESTO">🔧 Repuesto / Accesorio</option>
+                                        <option value="OTROS">📂 Otros</option>
                                     </select>
                                 </div>
+
+                                {/* Descripción */}
+                                <div className="space-y-1">
+                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">
+                                        Descripción <span className="normal-case font-normal text-slate-300">(opcional)</span>
+                                    </label>
+                                    <textarea
+                                        rows={2}
+                                        placeholder="Breve descripción de esta categoría..."
+                                        className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-primary-500 text-sm resize-none"
+                                        value={editingCategoria?.descripcion || ''}
+                                        onChange={e => setEditingCategoria({ ...editingCategoria, descripcion: e.target.value })}
+                                    />
+                                </div>
+
+                                {/* Si es edición, mostrar estado actual */}
+                                {editingCategoria?.id && (
+                                    <div className={cn(
+                                        'flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold',
+                                        editingCategoria.activo === false
+                                            ? 'bg-red-50 text-red-600 border border-red-100'
+                                            : 'bg-emerald-50 text-emerald-700 border border-emerald-100'
+                                    )}>
+                                        <span className={cn(
+                                            'w-2 h-2 rounded-full',
+                                            editingCategoria.activo === false ? 'bg-red-400' : 'bg-emerald-400'
+                                        )} />
+                                        Estado: {editingCategoria.activo === false ? 'Inactiva (dada de baja)' : 'Activa'}
+                                    </div>
+                                )}
                             </div>
-                            <div className="flex gap-4 pt-2">
-                                <button onClick={() => setIsCategoriaModalOpen(false)} className="flex-1 py-3 font-bold border rounded-xl hover:bg-slate-50 transition-colors">Cancelar</button>
-                                <button onClick={handleSaveCategoria} className="flex-1 py-3 font-bold bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors">Guardar</button>
+
+                            {/* Botones */}
+                            <div className="flex gap-3 pt-2">
+                                <button
+                                    onClick={() => { setIsCategoriaModalOpen(false); setEditingCategoria(null) }}
+                                    className="flex-1 py-3 font-bold border border-slate-200 rounded-xl hover:bg-slate-50 transition-colors text-slate-600"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleSaveCategoria}
+                                    disabled={saving || !editingCategoria?.nombre?.trim()}
+                                    className="flex-1 py-3 font-bold bg-primary-600 text-white rounded-xl hover:bg-primary-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+                                >
+                                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                                    Guardar
+                                </button>
                             </div>
                         </div>
                     </div>

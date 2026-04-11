@@ -12,48 +12,57 @@ export default function generarXml(comprobante: any): string {
   const pagos = comprobante.comprobante_pagos || [];
 
   const ambiente = configSri.ambiente === "PRODUCCION" ? "2" : "1";
-  const secuencial9 = comprobante.secuencial?.split("-").pop() || "000000001";
+  const secuencial9 = (comprobante.secuencial?.split("-").pop() || "000000001").padStart(9, "0");
   const estab = (comprobante.secuencial?.split("-")[0] || "001").padStart(3, "0").slice(-3);
   const pto = (comprobante.secuencial?.split("-")[1] || "001").padStart(3, "0").slice(-3);
-  const fechaEmision = format(new Date(comprobante.created_at || new Date()), "dd/MM/yyyy");
+  // Convertir a hora Ecuador (UTC-5) para que la fecha del XML sea la del negocio
+  const _fechaRaw = new Date(comprobante.created_at || new Date());
+  const _fechaEcuador = new Date(_fechaRaw.getTime() - 5 * 60 * 60 * 1000);
+  const fechaEmision = format(_fechaEcuador, "dd/MM/yyyy");
 
-  // ── Calcular totales y desglosar IVA
-  let subtotalSinIva = 0;
-  let totalIva = 0;
+  // ── Calcular totales usando los valores pre-calculados almacenados en comprobante_detalles
+  // precio_unitario → SIN IVA (el frontend lo calcula así)
+  // subtotal        → precio_unitario × cantidad × (1 - desc%)   [sin IVA]
+  // iva_valor       → subtotal × (iva_porcentaje / 100)
+  // IMPORTANTE: redondear a 2 decimales en cada paso para evitar acumulación float
+
+  const r2 = (n: number) => Math.round(n * 100) / 100;
 
   const detallesProcesados = detalles.map((d: any) => {
-    const cantidad = Number(d.cantidad || 0);
-    const precioUnitarioConIva = Number(d.precio_unitario || 0);
-    const pctIva = Number(d.iva_porcentaje || 0);
-    const factorIva = 1 + (pctIva / 100);
-
-    const precioUnitarioSinIva = precioUnitarioConIva / factorIva;
-    const subtotalItemSinIva = precioUnitarioSinIva * cantidad;
-    const valorIvaItem = subtotalItemSinIva * (pctIva / 100);
-
-    subtotalSinIva += subtotalItemSinIva;
-    totalIva += valorIvaItem;
+    const cantidad          = Number(d.cantidad       || 0);
+    const pctIva            = Number(d.iva_porcentaje || 0);
+    const precioUnitarioSinIva = r2(Number(d.precio_unitario || 0));
+    const subtotalItemSinIva   = r2(Number(d.subtotal         || 0));  // ya es sin IVA
+    const valorIvaItem         = r2(Number(d.iva_valor        || 0));  // ya calculado
+    const descuentoPct         = Number(d.descuento || 0);
+    const descuentoValor       = r2(precioUnitarioSinIva * cantidad * descuentoPct / 100);
 
     return {
       ...d,
       precioUnitarioSinIva,
       subtotalItemSinIva,
       valorIvaItem,
-      pctIva
+      pctIva,
+      descuentoValor,
     };
   });
 
-  const totalConIva = subtotalSinIva + totalIva;
-
-  // ── Agrupar IVAs para totalConImpuestos
+  // ── Agrupar por tasa de IVA para <totalConImpuestos>
   const ivaMap: Record<string, { base: number; valor: number; codigoPct: string; tarifa: number }> = {};
   detallesProcesados.forEach((d: any) => {
     const key = d.pctIva.toString();
-    const codigoPct = d.pctIva === 15 ? "4" : d.pctIva === 12 ? "2" : d.pctIva === 0 ? "0" : d.pctIva === 5 ? "5" : "0";
+    const codigoPct = d.pctIva === 15 ? "4" : d.pctIva === 12 ? "2" : d.pctIva === 5 ? "5" : "0";
     if (!ivaMap[key]) ivaMap[key] = { base: 0, valor: 0, codigoPct, tarifa: d.pctIva };
-    ivaMap[key].base += d.subtotalItemSinIva;
-    ivaMap[key].valor += d.valorIvaItem;
+    ivaMap[key].base  = r2(ivaMap[key].base  + d.subtotalItemSinIva);
+    ivaMap[key].valor = r2(ivaMap[key].valor + d.valorIvaItem);
   });
+
+  // ── totalSinImpuestos y totalImpuestos deben coincidir EXACTAMENTE con el XML
+  // Se calculan sumando los valores redondeados del ivaMap (no acumulando floats crudos)
+  const totalSinImpuestosXml = r2(Object.values(ivaMap).reduce((s, iv) => s + iv.base,  0));
+  const totalImpuestosXml    = r2(Object.values(ivaMap).reduce((s, iv) => s + iv.valor, 0));
+  // importeTotal = lo que el SRI verifica: totalSinImpuestos + totalImpuestos
+  const importeTotalXml      = r2(totalSinImpuestosXml + totalImpuestosXml);
 
   const totalConImpuestosXml = Object.values(ivaMap)
     .map(
@@ -72,11 +81,11 @@ export default function generarXml(comprobante: any): string {
     .map(
       (d: any) => `
     <detalle>
-      <codigoPrincipal>${(d.producto_id || "001").slice(0, 25)}</codigoPrincipal>
+      <codigoPrincipal>${(d.productos?.codigo || d.producto_id || "SIN-COD").slice(0, 25)}</codigoPrincipal>
       <descripcion>${(d.nombre_producto || "Producto").toUpperCase()}</descripcion>
       <cantidad>${Number(d.cantidad).toFixed(6)}</cantidad>
       <precioUnitario>${d.precioUnitarioSinIva.toFixed(6)}</precioUnitario>
-      <descuento>0.00</descuento>
+      <descuento>${d.descuentoValor.toFixed(2)}</descuento>
       <precioTotalSinImpuesto>${d.subtotalItemSinIva.toFixed(2)}</precioTotalSinImpuesto>
       <impuestos>
         <impuesto>
@@ -93,12 +102,14 @@ export default function generarXml(comprobante: any): string {
 
   // ── Pagos
   const formasPagoSri: Record<string, string> = {
-    efectivo: "01",
+    efectivo:      "01",
+    tarjeta:       "19",   // Tarjeta D/C (valor usado en comprobante_pagos)
     tarjeta_credito: "19",
-    tarjeta_debito: "20",
+    tarjeta_debito:  "20",
     transferencia: "17",
-    cheque: "15",
-    credito: "16",
+    cheque:        "15",
+    credito:       "16",
+    otros:         "01",   // SRI no tiene "otros"; se registra como efectivo en el XML
   };
 
   const pagosXml =
@@ -160,12 +171,12 @@ export default function generarXml(comprobante: any): string {
     <razonSocialComprador>${(cliente.nombre || "CONSUMIDOR FINAL").toUpperCase()}</razonSocialComprador>
     <identificacionComprador>${identificacion}</identificacionComprador>
     <direccionComprador>${(cliente.direccion || "ECUADOR").toUpperCase()}</direccionComprador>
-    <totalSinImpuestos>${subtotalSinIva.toFixed(2)}</totalSinImpuestos>
+    <totalSinImpuestos>${totalSinImpuestosXml.toFixed(2)}</totalSinImpuestos>
     <totalDescuento>0.00</totalDescuento>
     <totalConImpuestos>${totalConImpuestosXml}
     </totalConImpuestos>
     <propina>0.00</propina>
-    <importeTotal>${(comprobante.total ?? totalConIva).toFixed(2)}</importeTotal>
+    <importeTotal>${importeTotalXml.toFixed(2)}</importeTotal>
     <moneda>DOLAR</moneda>
     <pagos>${pagosXml}
     </pagos>

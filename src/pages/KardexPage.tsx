@@ -141,62 +141,93 @@ export function KardexPage() {
             )}
 
             {/* Tabla de Movimientos */}
-            {movimientos.length > 0 && (
-                <div className="card overflow-hidden">
-                    <div className="overflow-x-auto">
-                        <table className="w-full">
-                            <thead className="bg-slate-50 border-b border-slate-200">
-                                <tr>
-                                    <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Fecha</th>
-                                    <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Tipo</th>
-                                    <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Motivo</th>
-                                    <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Documento</th>
-                                    <th className="px-6 py-4 text-right text-sm font-semibold text-slate-900">Entrada</th>
-                                    <th className="px-6 py-4 text-right text-sm font-semibold text-slate-900">Salida</th>
-                                    <th className="px-6 py-4 text-right text-sm font-semibold text-slate-900">Saldo</th>
-                                    <th className="px-6 py-4 text-right text-sm font-semibold text-slate-900">Costo Prom.</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-200">
-                                {movimientos.map(mov => (
-                                    <tr key={mov.id} className="hover:bg-slate-50">
-                                        <td className="px-6 py-4 text-sm text-slate-900">
-                                            {new Date(mov.fecha).toLocaleString()}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {mov.tipo_movimiento === 'ENTRADA' ? (
-                                                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-green-100 text-green-700 text-sm font-medium">
-                                                    <TrendingUp className="w-4 h-4" />
-                                                    Entrada
-                                                </span>
-                                            ) : (
-                                                <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-red-100 text-red-700 text-sm font-medium">
-                                                    <TrendingDown className="w-4 h-4" />
-                                                    Salida
-                                                </span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-slate-600">{mov.motivo}</td>
-                                        <td className="px-6 py-4 text-sm text-slate-600">{mov.documento_referencia || '-'}</td>
-                                        <td className="px-6 py-4 text-right text-sm font-medium text-green-600">
-                                            {mov.tipo_movimiento === 'ENTRADA' ? mov.cantidad.toFixed(2) : '-'}
-                                        </td>
-                                        <td className="px-6 py-4 text-right text-sm font-medium text-red-600">
-                                            {mov.tipo_movimiento === 'SALIDA' ? mov.cantidad.toFixed(2) : '-'}
-                                        </td>
-                                        <td className="px-6 py-4 text-right text-sm font-bold text-slate-900">
-                                            {mov.saldo_cantidad.toFixed(2)}
-                                        </td>
-                                        <td className="px-6 py-4 text-right text-sm text-slate-600">
-                                            ${mov.saldo_costo_promedio?.toFixed(2) || '0.00'}
-                                        </td>
+            {movimientos.length > 0 && (() => {
+                // Calcular saldo acumulado en tiempo real (para corregir registros históricos con saldo=0)
+                const allSaldosZero = movimientos.every(m => !m.saldo_cantidad)
+                let saldoAcum = allSaldosZero ? 0 : Number(movimientos[0].saldo_cantidad)
+                if (allSaldosZero) {
+                    // Reconstituir desde el primer movimiento
+                }
+                const rows = movimientos.map((mov, idx) => {
+                    let saldoMostrar: number
+                    if (allSaldosZero) {
+                        // Calcular acumulado desde cero
+                        if (idx === 0) {
+                            saldoAcum = mov.tipo_movimiento === 'ENTRADA' ? Number(mov.cantidad) : -Number(mov.cantidad)
+                        } else {
+                            saldoAcum = mov.tipo_movimiento === 'ENTRADA'
+                                ? saldoAcum + Number(mov.cantidad)
+                                : saldoAcum - Number(mov.cantidad)
+                        }
+                        saldoMostrar = saldoAcum
+                    } else {
+                        saldoMostrar = Number(mov.saldo_cantidad)
+                    }
+                    const costoMostrar = Number(mov.costo_unitario || mov.saldo_costo_promedio || 0)
+                    return { ...mov, saldoMostrar, costoMostrar }
+                })
+
+                return (
+                    <div className="card overflow-hidden">
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead className="bg-slate-50 border-b border-slate-200">
+                                    <tr>
+                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Fecha</th>
+                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Tipo</th>
+                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Motivo</th>
+                                        <th className="px-6 py-4 text-left text-sm font-semibold text-slate-900">Documento</th>
+                                        <th className="px-6 py-4 text-right text-sm font-semibold text-slate-900">Entrada</th>
+                                        <th className="px-6 py-4 text-right text-sm font-semibold text-slate-900">Salida</th>
+                                        <th className="px-6 py-4 text-right text-sm font-semibold text-slate-900">Saldo</th>
+                                        <th className="px-6 py-4 text-right text-sm font-semibold text-slate-900">Costo Unit.</th>
+                                        <th className="px-6 py-4 text-right text-sm font-semibold text-slate-900">Valor Total</th>
                                     </tr>
-                                ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="divide-y divide-slate-200">
+                                    {rows.map(mov => (
+                                        <tr key={mov.id} className="hover:bg-slate-50">
+                                            <td className="px-6 py-4 text-sm text-slate-900">
+                                                {new Date(mov.fecha).toLocaleDateString('es-EC')}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {mov.tipo_movimiento === 'ENTRADA' ? (
+                                                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-green-100 text-green-700 text-sm font-medium">
+                                                        <TrendingUp className="w-4 h-4" />
+                                                        Entrada
+                                                    </span>
+                                                ) : (
+                                                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-red-100 text-red-700 text-sm font-medium">
+                                                        <TrendingDown className="w-4 h-4" />
+                                                        Salida
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4 text-sm text-slate-600">{mov.motivo}</td>
+                                            <td className="px-6 py-4 text-sm text-slate-600">{mov.documento_referencia || '-'}</td>
+                                            <td className="px-6 py-4 text-right text-sm font-medium text-green-600">
+                                                {mov.tipo_movimiento === 'ENTRADA' ? Number(mov.cantidad).toFixed(2) : '-'}
+                                            </td>
+                                            <td className="px-6 py-4 text-right text-sm font-medium text-red-600">
+                                                {mov.tipo_movimiento === 'SALIDA' ? Number(mov.cantidad).toFixed(2) : '-'}
+                                            </td>
+                                            <td className="px-6 py-4 text-right text-sm font-bold text-slate-900">
+                                                {mov.saldoMostrar.toFixed(2)}
+                                            </td>
+                                            <td className="px-6 py-4 text-right text-sm text-slate-600">
+                                                {mov.costoMostrar > 0 ? `$${mov.costoMostrar.toFixed(4)}` : '-'}
+                                            </td>
+                                            <td className="px-6 py-4 text-right text-sm font-medium text-slate-700">
+                                                {mov.costoMostrar > 0 ? `$${(mov.saldoMostrar * mov.costoMostrar).toFixed(2)}` : '-'}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
-                </div>
-            )}
+                )
+            })()}
 
             {movimientos.length === 0 && productoSeleccionado && !loading && (
                 <div className="card p-12 text-center">

@@ -8,13 +8,19 @@ import {
     Settings,
     LogOut,
     ChevronRight,
+    ChevronDown,
     Menu,
     X,
     Truck,
     BarChart3,
     FilePlus,
-    Boxes,
-    BookOpen
+    ShoppingCart,
+    BookOpen,
+    UserCheck,
+    Wallet,
+    Search,
+    FileMinus,
+    Ban,
 } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { cn } from '../lib/utils'
@@ -24,23 +30,41 @@ interface SidebarItemProps {
     icon: React.ElementType
     label: string
     active?: boolean
+    sub?: boolean
 }
 
-const SidebarItem = ({ to, icon: Icon, label, active }: SidebarItemProps) => (
+const SidebarItem = ({ to, icon: Icon, label, active, sub }: SidebarItemProps) => (
     <Link
         to={to}
         className={cn(
-            "flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group",
+            "flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group",
+            sub ? "pl-8 py-2" : "",
             active
                 ? "bg-primary-50 text-primary-700 font-medium"
                 : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
         )}
     >
-        <Icon className={cn("w-5 h-5", active ? "text-primary-600" : "text-slate-400 group-hover:text-slate-600")} />
-        <span>{label}</span>
-        {active && <ChevronRight className="w-4 h-4 ml-auto" />}
+        <Icon className={cn("w-5 h-5 shrink-0", sub ? "w-4 h-4" : "", active ? "text-primary-600" : "text-slate-400 group-hover:text-slate-600")} />
+        <span className={sub ? "text-sm" : ""}>{label}</span>
+        {active && !sub && <ChevronRight className="w-4 h-4 ml-auto" />}
     </Link>
 )
+
+interface NavGroup {
+    type: 'group'
+    icon: React.ElementType
+    label: string
+    roles: string[]
+    children: { to: string; label: string; icon: React.ElementType }[]
+}
+interface NavLink {
+    type?: 'link'
+    to: string
+    icon: React.ElementType
+    label: string
+    roles: string[]
+}
+type NavItem = NavLink | NavGroup
 
 import { CierreCajaModal } from './CierreCajaModal'
 
@@ -49,8 +73,13 @@ export function Layout({ children }: { children: React.ReactNode }) {
     const location = useLocation()
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(true)
     const [isCierreCajaOpen, setIsCierreCajaOpen] = React.useState(false)
+    const [openGroups, setOpenGroups] = React.useState<string[]>(['Consultas'])
 
-    const navigation = [
+    const toggleGroup = (label: string) => {
+        setOpenGroups(prev => prev.includes(label) ? prev.filter(g => g !== label) : [...prev, label])
+    }
+
+    const navigation: NavItem[] = [
         { to: '/configuracion', icon: Settings, label: 'Plataforma', roles: ['admin_plataforma'] },
         { to: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin_plataforma'] },
         { to: '/nueva-factura', icon: FilePlus, label: 'Nueva Factura', roles: ['oficina'] },
@@ -58,9 +87,24 @@ export function Layout({ children }: { children: React.ReactNode }) {
         { to: '/clientes', icon: Users, label: 'Clientes', roles: ['oficina'] },
         { to: '/productos', icon: Package, label: 'Productos', roles: ['oficina'] },
         { to: '/proveedores', icon: Truck, label: 'Proveedores', roles: ['oficina'] },
-        { to: '/inventario', icon: Boxes, label: 'Inventario', roles: ['oficina'] },
+        { to: '/inventario', icon: ShoppingCart, label: 'Ingreso de Compras', roles: ['oficina'] },
         { to: '/kardex', icon: BarChart3, label: 'Kardex', roles: ['oficina'] },
+        { to: '/vendedores', icon: UserCheck, label: 'Vendedores', roles: ['oficina'] },
+        { to: '/cartera-cxc', icon: Wallet, label: 'Cartera CxC', roles: ['oficina'] },
+        { to: '/notas-credito', icon: FileMinus, label: 'Notas de Crédito', roles: ['oficina'] },
+        { to: '/anulacion-facturas', icon: Ban, label: 'Anulación de Facturas', roles: ['oficina'] },
         { to: '/cierres', icon: BookOpen, label: 'Cierres de Caja', roles: ['oficina'] },
+        {
+            type: 'group',
+            icon: Search,
+            label: 'Consultas',
+            roles: ['oficina'],
+            children: [
+                { to: '/consultas/ventas', label: 'Ventas por Período', icon: FileText },
+                { to: '/consultas/cartera-clientes', label: 'Deudas Clientes', icon: Wallet },
+                { to: '/cartera/estado-cuenta', label: 'Estado de Cuenta', icon: Wallet },
+            ]
+        },
         { to: '/configuracion', icon: Settings, label: 'Configuración', roles: ['oficina'] },
     ]
 
@@ -88,14 +132,53 @@ export function Layout({ children }: { children: React.ReactNode }) {
                         )}
                     </div>
 
-                    <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-                        {filteredNav.map((item) => (
-                            <SidebarItem
-                                key={item.to}
-                                {...item}
-                                active={location.pathname === item.to}
-                            />
-                        ))}
+                    <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
+                        {filteredNav.map((item) => {
+                            if ((item as NavGroup).type === 'group') {
+                                const group = item as NavGroup
+                                const isOpen = openGroups.includes(group.label)
+                                const anyChildActive = group.children.some(c => location.pathname === c.to)
+                                return (
+                                    <div key={group.label}>
+                                        <button
+                                            onClick={() => toggleGroup(group.label)}
+                                            className={cn(
+                                                "w-full flex items-center gap-3 px-4 py-2.5 rounded-lg transition-all duration-200 group",
+                                                anyChildActive ? "bg-primary-50 text-primary-700 font-medium" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                                            )}
+                                        >
+                                            <group.icon className={cn("w-5 h-5 shrink-0", anyChildActive ? "text-primary-600" : "text-slate-400 group-hover:text-slate-600")} />
+                                            {isSidebarOpen && <span className="flex-1 text-left">{group.label}</span>}
+                                            {isSidebarOpen && <ChevronDown className={cn("w-4 h-4 transition-transform", isOpen ? "rotate-180" : "")} />}
+                                        </button>
+                                        {isOpen && isSidebarOpen && (
+                                            <div className="mt-1 space-y-0.5">
+                                                {group.children.map(child => (
+                                                    <SidebarItem
+                                                        key={child.to}
+                                                        to={child.to}
+                                                        icon={child.icon}
+                                                        label={child.label}
+                                                        active={location.pathname === child.to}
+                                                        sub
+                                                    />
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                )
+                            }
+                            const link = item as NavLink
+                            return (
+                                <SidebarItem
+                                    key={link.to + link.label}
+                                    to={link.to}
+                                    icon={link.icon}
+                                    label={link.label}
+                                    active={location.pathname === link.to}
+                                />
+                            )
+                        })}
                     </nav>
 
                     <div className="p-4 border-t border-slate-100 space-y-2">

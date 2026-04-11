@@ -124,9 +124,16 @@ export const facturacionService = {
         return `${establecimiento.padStart(3, '0')}-${puntoEmision.padStart(3, '0')}-${numStr}`
     },
 
-    async generarFacturaDesdePedido(pedido: any, data: { clienteId: string, pagos: { metodo: string, valor: number, referencia?: string }[], sri_utilizacion_sistema_financiero?: boolean, caja_sesion_id?: string }) {
+    async generarFacturaDesdePedido(pedido: any, data: {
+        clienteId: string,
+        pagos: { metodo: string, valor: number, referencia?: string }[],
+        sri_utilizacion_sistema_financiero?: boolean,
+        caja_sesion_id?: string,
+        vendedor_id?: string | null,
+        dias_plazo_credito?: number,
+    }) {
         try {
-            const { clienteId, pagos, sri_utilizacion_sistema_financiero = false } = data
+            const { clienteId, pagos, sri_utilizacion_sistema_financiero = false, vendedor_id, dias_plazo_credito } = data
             // 1. Obtener configuración SRI de la empresa
             const config = await this.getSriConfig(pedido.empresa_id)
             const est = config.establecimiento || '001'
@@ -164,7 +171,8 @@ export const facturacionService = {
                     estado_sri: 'PENDIENTE',
                     fecha_autorizacion: null,
                     sri_utilizacion_sistema_financiero,
-                    caja_sesion_id: data.caja_sesion_id
+                    caja_sesion_id: data.caja_sesion_id,
+                    vendedor_id: vendedor_id || null
                 })
                 .select()
                 .single()
@@ -198,6 +206,30 @@ export const facturacionService = {
             const { error: errorPagos } = await supabase.from('comprobante_pagos').insert(pagosFormatted)
             if (errorPagos) console.error('Error inserting payments:', errorPagos)
 
+            // 1.3 Cartera CxC — solo cuando hay pago a crédito
+            const pagosCredito = pagos.filter(p => p.metodo === 'credito' && p.valor > 0)
+            if (pagosCredito.length > 0) {
+                const montoCredito = pagosCredito.reduce((sum, p) => sum + Number(p.valor), 0)
+                const diasPlazo = dias_plazo_credito ?? 30
+                const fechaEmision = new Date()
+                const fechaVencimiento = new Date(fechaEmision)
+                fechaVencimiento.setDate(fechaVencimiento.getDate() + diasPlazo)
+
+                const { error: errorCartera } = await supabase.from('cartera_cxc').insert({
+                    empresa_id: pedido.empresa_id,
+                    cliente_id: clienteId,
+                    comprobante_id: factura.id,
+                    vendedor_id: vendedor_id || null,
+                    fecha_emision: fechaEmision.toISOString().split('T')[0],
+                    dias_plazo: diasPlazo,
+                    fecha_vencimiento: fechaVencimiento.toISOString().split('T')[0],
+                    monto_total: montoCredito,
+                    monto_abonado: 0,
+                    estado: 'PENDIENTE',
+                })
+                if (errorCartera) console.error('[cartera_cxc] Error al crear registro de cartera:', errorCartera)
+            }
+
             // ACTUALIZAR SECUENCIAL
             await this.updateSriConfig(pedido.empresa_id, {
                 ...config,
@@ -230,22 +262,22 @@ export const facturacionService = {
                 }
             }
 
-            // 5. Invocar Edge Function sri-signer (firma XAdES-BES + SRI + correo Resend)
+            // 5. Invocar Edge Function factura-electronica (firma XAdES-BES + SRI + correo Resend)
             try {
-                const { data: sriResult, error: sriErr } = await supabase.functions.invoke('sri-signer', {
+                const { data: sriResult, error: sriErr } = await supabase.functions.invoke('factura-electronica', {
                     body: { comprobante_id: factura.id }
                 })
 
                 if (sriErr) {
-                    console.error('[sri-signer] Error invocando Edge Function:', sriErr)
+                    console.error('[factura-electronica] Error invocando Edge Function:', sriErr)
                     // No tiramos error: el comprobante queda en PENDIENTE y se puede reintentar
                 } else if (sriResult?.success) {
-                    console.log('[sri-signer] Resultado:', sriResult)
+                    console.log('[factura-electronica] Resultado:', sriResult)
                 } else {
-                    console.warn('[sri-signer] Respuesta inesperada:', sriResult)
+                    console.warn('[factura-electronica] Respuesta inesperada:', sriResult)
                 }
             } catch (edgeFnErr) {
-                console.error('[sri-signer] Excepción al invocar Edge Function:', edgeFnErr)
+                console.error('[factura-electronica] Excepción al invocar Edge Function:', edgeFnErr)
                 // El comprobante sigue en PENDIENTE — no bloquea el flujo del cajero
             }
 
@@ -264,20 +296,13 @@ export const facturacionService = {
     },
 
     async getComprobanteCompleto(id: string) {
-        // Obtenemos cabecera con cliente y pedido con detalles (detalles están en pedido_detalles)
         const { data, error } = await supabase
             .from('comprobantes')
             .select(`
                 *,
                 clientes (*),
-                pedidos (
-                    id,
-                    pedido_detalles (
-                        *,
-                        productos (*)
-                    )
-                ),
                 empresas (*),
+                comprobante_detalles (*),
                 comprobante_pagos (*)
             `)
             .eq('id', id)

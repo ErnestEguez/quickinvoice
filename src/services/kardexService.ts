@@ -100,9 +100,24 @@ export const kardexService = {
         if (errorProd) throw errorProd
         if (!producto.maneja_stock) return // No registrar si no maneja stock
 
+        const stockActual = Number(producto.stock || 0)
+        const costoActual = Number(producto.costo_promedio || 0)
+        const cantidad = Number(movimiento.cantidad || 0)
+        const costoUnitario = Number(movimiento.costo_unitario || costoActual)
+
         const nuevaCantidad = movimiento.tipo_movimiento === 'ENTRADA'
-            ? (producto.stock || 0) + (movimiento.cantidad || 0)
-            : (producto.stock || 0) - (movimiento.cantidad || 0)
+            ? stockActual + cantidad
+            : stockActual - cantidad
+
+        // Costo promedio ponderado: solo se recalcula en ENTRADA
+        let nuevoCostoPromedio = costoActual
+        if (movimiento.tipo_movimiento === 'ENTRADA' && costoUnitario > 0) {
+            if (stockActual + cantidad > 0) {
+                nuevoCostoPromedio = ((stockActual * costoActual) + (cantidad * costoUnitario)) / (stockActual + cantidad)
+            } else {
+                nuevoCostoPromedio = costoUnitario
+            }
+        }
 
         // 2. Insertar en Kardex
         const { error: errorKardex } = await supabase
@@ -110,16 +125,17 @@ export const kardexService = {
             .insert({
                 ...movimiento,
                 fecha: movimiento.fecha || new Date().toISOString(),
+                costo_unitario: costoUnitario,
                 saldo_cantidad: nuevaCantidad,
-                saldo_costo_promedio: producto.costo_promedio
+                saldo_costo_promedio: nuevoCostoPromedio,
             })
 
         if (errorKardex) throw errorKardex
 
-        // 3. Actualizar stock en productos
+        // 3. Actualizar stock y costo_promedio en productos
         const { error: errorUpdate } = await supabase
             .from('productos')
-            .update({ stock: nuevaCantidad })
+            .update({ stock: nuevaCantidad, costo_promedio: nuevoCostoPromedio })
             .eq('id', movimiento.producto_id)
 
         if (errorUpdate) throw errorUpdate
@@ -131,9 +147,10 @@ export const kardexService = {
                 empresa_id: empresaId,
                 producto_id: item.producto_id,
                 tipo_movimiento: 'SALIDA',
-                motivo: `Venta - Pedido #${pedidoId.slice(0, 8)}`,
+                motivo: `Venta - Factura #${pedidoId.slice(0, 8)}`,
                 documento_referencia: pedidoId,
-                cantidad: item.cantidad
+                cantidad: item.cantidad,
+                // costo_unitario se tomará del costo_promedio actual del producto
             })
         }
     }
