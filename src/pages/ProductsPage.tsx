@@ -286,10 +286,19 @@ export function ProductsPage() {
         try {
             setLoading(true)
             const [prodData, catData] = await Promise.all([
-                productoService.getProductos(),
-                productoService.getCategorias()
+                productoService.getProductos(empresa!.id),
+                productoService.getCategorias(empresa!.id)
             ])
-            setProductos(prodData)
+            // Enriquecer productos con nombre de categoría desde el array local
+            // (fallback por si el join RLS devuelve null)
+            const catMap: Record<string, string> = {}
+            for (const c of catData) catMap[c.id] = c.nombre
+
+            const enriched = (prodData || []).map((p: any) => ({
+                ...p,
+                categorias: p.categorias || (p.categoria_id ? { nombre: catMap[p.categoria_id] || '' } : null)
+            }))
+            setProductos(enriched)
             setCategorias(catData)
         } catch (error) {
             console.error('Error loading products:', error)
@@ -422,7 +431,7 @@ export function ProductsPage() {
                                     </td>
                                     <td className="px-6 py-4">
                                         <span className="px-2 py-1 bg-primary-50 text-primary-700 rounded text-xs font-bold">
-                                            {producto.categorias?.nombre || 'General'}
+                                            {producto.categorias?.nombre || '—'}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-right font-bold text-slate-900">
@@ -500,7 +509,8 @@ export function ProductsPage() {
                                     <input
                                         required
                                         type="number"
-                                        step="0.01"
+                                        step="0.0001"
+                                        min="0"
                                         className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-primary-500 outline-none"
                                         value={editingProduct?.precio_venta || 0}
                                         onChange={(e) => setEditingProduct({ ...editingProduct, precio_venta: parseFloat(e.target.value) })}

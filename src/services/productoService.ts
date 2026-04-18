@@ -19,22 +19,28 @@ export interface Categoria {
 }
 
 export const productoService = {
-    async getProductos() {
-        const { data, error } = await supabase
+    async getProductos(empresaId?: string) {
+        let query = supabase
             .from('productos')
-            .select('*, categorias(nombre)')
+            .select('*, categorias(id, nombre)')
             .eq('activo', true)
 
+        if (empresaId) query = query.eq('empresa_id', empresaId)
+
+        const { data, error } = await query
         if (error) throw error
         return data
     },
 
-    async getCategorias() {
-        const { data, error } = await supabase
+    async getCategorias(empresaId?: string) {
+        let query = supabase
             .from('categorias')
             .select('*')
             .order('nombre', { ascending: true })
 
+        if (empresaId) query = query.eq('empresa_id', empresaId)
+
+        const { data, error } = await query
         if (error) throw error
         return data as Categoria[]
     },

@@ -400,7 +400,6 @@ export function ConfigurationPage() {
             } else {
                 await categoriaService.createCategoria({
                     nombre: editingCategoria.nombre,
-                    tipo: editingCategoria.tipo || 'PRODUCTO',
                     descripcion: editingCategoria.descripcion || '',
                     empresa_id: empresa!.id,
                 })
@@ -851,7 +850,7 @@ export function ConfigurationPage() {
                         </div>
                         <button
                             onClick={() => {
-                                setEditingCategoria({ nombre: '', tipo: 'ALIMENTO' })
+                                setEditingCategoria({ nombre: '' })
                                 setIsCategoriaModalOpen(true)
                             }}
                             className="btn btn-primary py-2 px-4 text-sm flex items-center gap-2"
@@ -893,9 +892,6 @@ export function ConfigurationPage() {
                                             <span className="shrink-0 text-[9px] font-black bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full uppercase">Inactiva</span>
                                         )}
                                     </div>
-                                    <span className="inline-block text-[10px] font-black px-2 py-0.5 rounded-full bg-primary-50 text-primary-600 uppercase tracking-widest">
-                                        {cat.tipo || 'General'}
-                                    </span>
                                     {cat.descripcion && (
                                         <p className="text-xs text-slate-400 mt-1 line-clamp-2">{cat.descripcion}</p>
                                     )}
@@ -1547,23 +1543,6 @@ export function ConfigurationPage() {
                                         onChange={e => setEditingCategoria({ ...editingCategoria, nombre: e.target.value })}
                                         autoFocus
                                     />
-                                </div>
-
-                                {/* Tipo */}
-                                <div className="space-y-1">
-                                    <label className="text-xs font-black text-slate-400 uppercase tracking-widest">Tipo</label>
-                                    <select
-                                        className="w-full px-4 py-3 rounded-xl border border-slate-200 outline-none focus:ring-2 focus:ring-primary-500 bg-white"
-                                        value={editingCategoria?.tipo || 'PRODUCTO'}
-                                        onChange={e => setEditingCategoria({ ...editingCategoria, tipo: e.target.value })}
-                                    >
-                                        <option value="PRODUCTO">📦 Producto / Mercadería</option>
-                                        <option value="SERVICIO">⚙️ Servicio</option>
-                                        <option value="ALIMENTO">🍲 Alimentos / Restaurante</option>
-                                        <option value="BEBIDA">🥤 Bebidas / Bar</option>
-                                        <option value="REPUESTO">🔧 Repuesto / Accesorio</option>
-                                        <option value="OTROS">📂 Otros</option>
-                                    </select>
                                 </div>
 
                                 {/* Descripción */}
