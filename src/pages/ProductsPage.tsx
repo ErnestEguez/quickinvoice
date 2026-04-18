@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { productoService } from '../services/productoService'
 import type { Producto, Categoria } from '../services/productoService'
+import { subproductoService, type Subproducto } from '../services/subproductoService'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency } from '../lib/utils'
 import {
@@ -10,8 +11,250 @@ import {
     Trash2,
     Package,
     X,
-    Save
+    Save,
+    Layers,
+    ToggleLeft,
+    ToggleRight,
 } from 'lucide-react'
+
+// ─── Modal de Subproductos ────────────────────────────────────────────────────
+
+function SubproductosPanel({
+    producto,
+    empresaId,
+    onClose,
+}: {
+    producto: Producto & { id: string }
+    empresaId: string
+    onClose: () => void
+}) {
+    const [subs, setSubs] = useState<Subproducto[]>([])
+    const [loading, setLoading] = useState(true)
+    const [saving, setSaving] = useState(false)
+    const [editingSub, setEditingSub] = useState<Partial<Subproducto> | null>(null)
+
+    useEffect(() => {
+        loadSubs()
+    }, [producto.id])
+
+    async function loadSubs() {
+        setLoading(true)
+        try {
+            setSubs(await subproductoService.getByProducto(producto.id))
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    function nuevoSub() {
+        setEditingSub({
+            producto_id: producto.id,
+            empresa_id: empresaId,
+            nombre: '',
+            precio_sin_iva: 0,
+            factor_conversion: 1,
+            estado: true,
+        })
+    }
+
+    async function handleSave() {
+        if (!editingSub) return
+        if (!editingSub.nombre?.trim()) return alert('Ingrese un nombre para la presentación')
+        if (!editingSub.factor_conversion || Number(editingSub.factor_conversion) <= 0)
+            return alert('El factor de conversión debe ser mayor a 0')
+
+        setSaving(true)
+        try {
+            if (editingSub.id) {
+                await subproductoService.update(editingSub.id, editingSub)
+            } else {
+                await subproductoService.create({
+                    producto_id: producto.id,
+                    empresa_id: empresaId,
+                    nombre: editingSub.nombre!,
+                    precio_sin_iva: Number(editingSub.precio_sin_iva || 0),
+                    factor_conversion: Number(editingSub.factor_conversion!),
+                    estado: true,
+                })
+            }
+            setEditingSub(null)
+            await loadSubs()
+        } catch (e: any) {
+            alert('Error al guardar: ' + e.message)
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    async function handleToggle(sub: Subproducto) {
+        try {
+            await subproductoService.toggleEstado(sub.id, !sub.estado)
+            await loadSubs()
+        } catch {
+            alert('Error al cambiar estado')
+        }
+    }
+
+    return (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+
+                {/* Header */}
+                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-orange-50">
+                    <div className="flex items-center gap-3">
+                        <Layers className="w-5 h-5 text-orange-500" />
+                        <div>
+                            <h2 className="text-lg font-bold text-slate-900">Presentaciones / Subproductos</h2>
+                            <p className="text-xs text-slate-500 font-medium">
+                                Producto maestro: <span className="text-orange-600 font-bold">{producto.nombre}</span>
+                            </p>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="p-2 hover:bg-white rounded-full transition-colors">
+                        <X className="w-5 h-5" />
+                    </button>
+                </div>
+
+                {/* Tabla de subproductos */}
+                <div className="p-6 space-y-4">
+                    {loading ? (
+                        <p className="text-center text-slate-400 py-6">Cargando...</p>
+                    ) : (
+                        <div className="rounded-xl border border-slate-100 overflow-hidden">
+                            <table className="w-full text-left text-sm">
+                                <thead>
+                                    <tr className="bg-slate-50 text-slate-400 text-xs uppercase tracking-wider">
+                                        <th className="px-4 py-3 font-medium">Nombre presentación</th>
+                                        <th className="px-4 py-3 font-medium text-right">Precio s/IVA</th>
+                                        <th className="px-4 py-3 font-medium text-right">Factor</th>
+                                        <th className="px-4 py-3 font-medium text-center">Estado</th>
+                                        <th className="px-4 py-3 font-medium text-right">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-50">
+                                    {subs.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={5} className="px-4 py-8 text-center text-slate-400 italic">
+                                                Sin presentaciones. Agrega la primera.
+                                            </td>
+                                        </tr>
+                                    ) : subs.map(sub => (
+                                        <tr key={sub.id} className={`${!sub.estado ? 'opacity-40' : ''} hover:bg-slate-50`}>
+                                            <td className="px-4 py-3 font-medium text-slate-900">{sub.nombre}</td>
+                                            <td className="px-4 py-3 text-right text-slate-600">{formatCurrency(sub.precio_sin_iva)}</td>
+                                            <td className="px-4 py-3 text-right font-mono text-slate-600">{Number(sub.factor_conversion).toFixed(6).replace(/\.?0+$/, '')}</td>
+                                            <td className="px-4 py-3 text-center">
+                                                <button onClick={() => handleToggle(sub)} title={sub.estado ? 'Desactivar' : 'Activar'}>
+                                                    {sub.estado
+                                                        ? <ToggleRight className="w-5 h-5 text-emerald-500 mx-auto" />
+                                                        : <ToggleLeft className="w-5 h-5 text-slate-300 mx-auto" />
+                                                    }
+                                                </button>
+                                            </td>
+                                            <td className="px-4 py-3 text-right">
+                                                <button
+                                                    onClick={() => setEditingSub(sub)}
+                                                    className="p-1.5 hover:bg-orange-50 rounded-lg text-slate-400 hover:text-orange-600 transition-all"
+                                                >
+                                                    <Edit2 className="w-4 h-4" />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    {/* Formulario inline de edición */}
+                    {editingSub && (
+                        <div className="border border-orange-200 rounded-xl p-4 bg-orange-50 space-y-3">
+                            <h3 className="text-sm font-bold text-orange-700">
+                                {editingSub.id ? 'Editar presentación' : 'Nueva presentación'}
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                <div className="md:col-span-1">
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Nombre</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Ej: Galón, 1/2 Litro..."
+                                        className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-orange-400 outline-none text-sm"
+                                        value={editingSub.nombre || ''}
+                                        onChange={e => setEditingSub(p => ({ ...p!, nombre: e.target.value }))}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Precio sin IVA</label>
+                                    <input
+                                        type="number"
+                                        step="0.0001"
+                                        min="0"
+                                        className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-orange-400 outline-none text-sm"
+                                        value={editingSub.precio_sin_iva ?? 0}
+                                        onChange={e => setEditingSub(p => ({ ...p!, precio_sin_iva: parseFloat(e.target.value) || 0 }))}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">
+                                        Factor conversión
+                                    </label>
+                                    <input
+                                        type="number"
+                                        step="0.000001"
+                                        min="0.000001"
+                                        className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-orange-400 outline-none text-sm font-mono"
+                                        value={editingSub.factor_conversion ?? 1}
+                                        onChange={e => setEditingSub(p => ({ ...p!, factor_conversion: parseFloat(e.target.value) || 1 }))}
+                                    />
+                                    <p className="text-[10px] text-slate-400 mt-1">
+                                        Fracción del producto maestro (ej: 1 galón = 0.02 si 1 tanque = 50 gal)
+                                    </p>
+                                </div>
+                            </div>
+                            <div className="flex gap-2 justify-end">
+                                <button
+                                    onClick={() => setEditingSub(null)}
+                                    className="px-4 py-2 rounded-lg border border-slate-200 text-slate-600 text-sm font-medium hover:bg-white transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={handleSave}
+                                    disabled={saving}
+                                    className="px-4 py-2 rounded-lg bg-orange-500 text-white text-sm font-bold hover:bg-orange-600 transition-colors flex items-center gap-2 disabled:opacity-50"
+                                >
+                                    <Save className="w-4 h-4" />
+                                    {saving ? 'Guardando...' : 'Guardar'}
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
+                    {!editingSub && (
+                        <button
+                            onClick={nuevoSub}
+                            className="w-full py-2 rounded-xl border-2 border-dashed border-orange-200 text-orange-500 font-bold text-sm hover:bg-orange-50 transition-colors flex items-center justify-center gap-2"
+                        >
+                            <Plus className="w-4 h-4" />
+                            Agregar presentación
+                        </button>
+                    )}
+                </div>
+
+                <div className="px-6 pb-6 flex justify-end">
+                    <button
+                        onClick={onClose}
+                        className="px-6 py-2 rounded-lg bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 transition-colors"
+                    >
+                        Cerrar
+                    </button>
+                </div>
+            </div>
+        </div>
+    )
+}
+
+// ─── ProductsPage ────────────────────────────────────────────────────────────
 
 export function ProductsPage() {
     const { empresa } = useAuth()
@@ -22,6 +265,7 @@ export function ProductsPage() {
     const [selectedCategoria, setSelectedCategoria] = useState<string>('')
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingProduct, setEditingProduct] = useState<Partial<Producto> | null>(null)
+    const [subproductosProducto, setSubproductosProducto] = useState<(Producto & { id: string }) | null>(null)
 
     useEffect(() => {
         if (empresa?.id) {
@@ -94,7 +338,7 @@ export function ProductsPage() {
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">Maestro de Productos</h1>
-                    <p className="text-slate-500">Gestiona el menú y catálogo de tu restaurante</p>
+                    <p className="text-slate-500">Gestiona el catálogo de productos y sus presentaciones</p>
                 </div>
                 <button
                     onClick={() => {
@@ -181,6 +425,13 @@ export function ProductsPage() {
                                     <td className="px-6 py-4 text-right">
                                         <div className="flex justify-end gap-2">
                                             <button
+                                                onClick={() => setSubproductosProducto(producto)}
+                                                className="p-2 hover:bg-orange-50 border border-transparent hover:border-orange-200 rounded-lg text-slate-400 hover:text-orange-600 transition-all"
+                                                title="Gestionar presentaciones / subproductos"
+                                            >
+                                                <Layers className="w-4 h-4" />
+                                            </button>
+                                            <button
                                                 onClick={() => {
                                                     setEditingProduct(producto)
                                                     setIsModalOpen(true)
@@ -211,7 +462,7 @@ export function ProductsPage() {
                 </div>
             </div>
 
-            {/* Modal */}
+            {/* Modal editar/crear producto */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
                     <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
@@ -254,7 +505,6 @@ export function ProductsPage() {
                                         onChange={(e) => setEditingProduct({ ...editingProduct, iva_porcentaje: parseInt(e.target.value) })}
                                     >
                                         <option value={0}>0%</option>
-                                        <option value={5}>5%</option>
                                         <option value={5}>5%</option>
                                         <option value={8}>8%</option>
                                         <option value={15}>15% (Actual)</option>
@@ -316,6 +566,15 @@ export function ProductsPage() {
                         </form>
                     </div>
                 </div>
+            )}
+
+            {/* Panel de Subproductos */}
+            {subproductosProducto && empresa?.id && (
+                <SubproductosPanel
+                    producto={subproductosProducto}
+                    empresaId={empresa.id}
+                    onClose={() => setSubproductosProducto(null)}
+                />
             )}
         </div>
     )

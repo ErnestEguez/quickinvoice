@@ -15,7 +15,8 @@ import { formatCurrency, validateIdentificacion } from '../lib/utils'
 import {
     Search, UserPlus, Plus, Trash2, X, Save,
     CheckCircle2, Loader2, FilePlus, CreditCard,
-    Package, Printer, User, Briefcase, ChevronDown, ChevronUp
+    Package, Printer, User, Briefcase, ChevronDown, ChevronUp,
+    Layers,
 } from 'lucide-react'
 import { vendedorService, type Vendedor } from '../services/vendedorService'
 import { cn } from '../lib/utils'
@@ -39,6 +40,8 @@ const DETALLE_VACIO: DetalleFacturaDirecta = {
     precio_unitario: 0,
     descuento: 0,
     iva_porcentaje: 15,
+    subproducto_id: null,
+    factor_conversion: 1,
 }
 
 export function FacturaDirectaPage() {
@@ -99,7 +102,12 @@ export function FacturaDirectaPage() {
         try {
             const [clientsList, prodList, consumidor, vendedoresList] = await Promise.all([
                 facturacionService.getClientes(empresa!.id),
-                supabase.from('productos').select('*').eq('empresa_id', empresa!.id).eq('activo', true).order('nombre'),
+                supabase
+                    .from('productos')
+                    .select('*, subproductos(*)')
+                    .eq('empresa_id', empresa!.id)
+                    .eq('activo', true)
+                    .order('nombre'),
                 facturacionService.getConsumidorFinal(empresa!.id).catch(() => null),
                 vendedorService.getVendedoresActivos(empresa!.id).catch(() => [])
             ])
@@ -164,15 +172,31 @@ export function FacturaDirectaPage() {
         setDetalles(prev => prev.map((d, i) => i === idx ? { ...d, [field]: value } : d))
     }
     const selectProducto = (idx: number, prod: any) => {
+        const subsActivos = (prod.subproductos || []).filter((s: any) => s.estado)
+        const tieneSubproductos = subsActivos.length > 0
+
         setDetalles(prev => prev.map((d, i) => i === idx ? {
             ...d,
             producto_id: prod.id,
-            nombre_producto: prod.nombre,
-            precio_unitario: prod.precio_venta,
-            iva_porcentaje: prod.iva_porcentaje ?? 15
+            // Si tiene presentaciones, esperar a que el usuario elija una
+            nombre_producto: tieneSubproductos ? '' : prod.nombre,
+            precio_unitario: tieneSubproductos ? 0 : prod.precio_venta,
+            iva_porcentaje: prod.iva_porcentaje ?? 15,
+            subproducto_id: null,
+            factor_conversion: 1,
         } : d))
         setSearchProducto(prev => ({ ...prev, [idx]: prod.nombre }))
         setProductDropdown(null)
+    }
+
+    const selectSubproducto = (idx: number, sub: any) => {
+        setDetalles(prev => prev.map((d, i) => i === idx ? {
+            ...d,
+            nombre_producto: sub.nombre,
+            precio_unitario: Number(sub.precio_sin_iva),
+            subproducto_id: sub.id,
+            factor_conversion: Number(sub.factor_conversion),
+        } : d))
     }
 
     // ─── PAGOS ────────────────────────────────────────────
@@ -534,6 +558,35 @@ export function FacturaDirectaPage() {
                                                 </div>
                                             )}
                                         </div>
+
+                                        {/* Selector de presentación (subproducto) */}
+                                        {(() => {
+                                            const prod = productos.find(p => p.id === det.producto_id)
+                                            const subsActivos = (prod?.subproductos || []).filter((s: any) => s.estado)
+                                            if (subsActivos.length === 0) return null
+                                            return (
+                                                <div className="col-span-12">
+                                                    <div className="flex items-center gap-2 bg-orange-50 border border-orange-200 rounded-lg px-3 py-2">
+                                                        <Layers className="w-4 h-4 text-orange-400 shrink-0" />
+                                                        <select
+                                                            value={det.subproducto_id || ''}
+                                                            onChange={e => {
+                                                                const sub = subsActivos.find((s: any) => s.id === e.target.value)
+                                                                if (sub) selectSubproducto(idx, sub)
+                                                            }}
+                                                            className="flex-1 bg-transparent text-sm text-orange-800 font-medium outline-none"
+                                                        >
+                                                            <option value="">— Seleccione presentación —</option>
+                                                            {subsActivos.map((s: any) => (
+                                                                <option key={s.id} value={s.id}>
+                                                                    {s.nombre} · ${Number(s.precio_sin_iva).toFixed(4)} · factor {Number(s.factor_conversion)}
+                                                                </option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            )
+                                        })()}
 
                                         {/* ✅ Cantidad - más grande (col-span-2) */}
                                         <div className="col-span-4 md:col-span-2">

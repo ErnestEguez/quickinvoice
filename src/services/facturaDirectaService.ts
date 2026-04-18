@@ -9,6 +9,9 @@ export interface DetalleFacturaDirecta {
     precio_unitario: number
     descuento: number       // porcentaje de descuento (0-100)
     iva_porcentaje: number  // 0, 5, 15, etc.
+    // Subproductos: si se seleccionó una presentación, almacenar su id y factor
+    subproducto_id?: string | null
+    factor_conversion?: number  // fracción del producto maestro por unidad vendida
 }
 
 export interface PagoFactura {
@@ -153,7 +156,8 @@ export const facturaDirectaService = {
                     subtotal: l.subtotal_neto,
                     iva_porcentaje: d.iva_porcentaje,
                     iva_valor: l.iva_valor,
-                    total: l.total
+                    total: l.total,
+                    subproducto_id: d.subproducto_id || null,
                 }
             })
 
@@ -219,17 +223,21 @@ export const facturaDirectaService = {
             .eq('id', empresa_id)
 
         // 8. Salida de Kardex para productos con inventario
+        // Si el detalle tiene factor_conversion (subproducto), la cantidad en Kardex
+        // es cantidad_vendida × factor (fracción del producto maestro descontada).
         try {
-            // Adaptar detalles al formato esperado por kardexService
             const kardexDetalles = detalles
                 .filter(d => d.producto_id && d.cantidad > 0)
-                .map(d => ({
-                    producto_id: d.producto_id,
-                    cantidad: d.cantidad,
-                    precio_unitario: d.precio_unitario,
-                    subtotal: calcularLinea(d).subtotal_neto,
-                    productos: { nombre: d.nombre_producto, maneja_stock: true }
-                }))
+                .map(d => {
+                    const factor = Number(d.factor_conversion || 1)
+                    return {
+                        producto_id: d.producto_id,
+                        cantidad: d.cantidad * factor,
+                        precio_unitario: d.precio_unitario,
+                        subtotal: calcularLinea(d).subtotal_neto,
+                        productos: { nombre: d.nombre_producto, maneja_stock: true }
+                    }
+                })
 
             if (kardexDetalles.length > 0) {
                 await kardexService.generarSalidaVenta(empresa_id, factura.id, kardexDetalles)
