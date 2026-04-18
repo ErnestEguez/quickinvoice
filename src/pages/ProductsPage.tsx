@@ -32,6 +32,8 @@ function SubproductosPanel({
     const [loading, setLoading] = useState(true)
     const [saving, setSaving] = useState(false)
     const [editingSub, setEditingSub] = useState<Partial<Subproducto> | null>(null)
+    // String separado para el input del factor (evita que "0." colapse a 0 o 1)
+    const [factorStr, setFactorStr] = useState<string>('1')
 
     useEffect(() => {
         loadSubs()
@@ -47,6 +49,7 @@ function SubproductosPanel({
     }
 
     function nuevoSub() {
+        setFactorStr('1')
         setEditingSub({
             producto_id: producto.id,
             empresa_id: empresaId,
@@ -153,7 +156,7 @@ function SubproductosPanel({
                                             </td>
                                             <td className="px-4 py-3 text-right">
                                                 <button
-                                                    onClick={() => setEditingSub(sub)}
+                                                    onClick={() => { setFactorStr(String(sub.factor_conversion)); setEditingSub(sub) }}
                                                     className="p-1.5 hover:bg-orange-50 rounded-lg text-slate-400 hover:text-orange-600 transition-all"
                                                 >
                                                     <Edit2 className="w-4 h-4" />
@@ -199,12 +202,18 @@ function SubproductosPanel({
                                         Factor conversión
                                     </label>
                                     <input
-                                        type="number"
-                                        step="0.000001"
-                                        min="0.000001"
+                                        type="text"
+                                        inputMode="decimal"
                                         className="w-full px-3 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-orange-400 outline-none text-sm font-mono"
-                                        value={editingSub.factor_conversion ?? 1}
-                                        onChange={e => setEditingSub(p => ({ ...p!, factor_conversion: parseFloat(e.target.value) || 1 }))}
+                                        value={factorStr}
+                                        onChange={e => {
+                                            const v = e.target.value
+                                            setFactorStr(v)
+                                            const n = parseFloat(v)
+                                            if (!isNaN(n) && n > 0) {
+                                                setEditingSub(p => ({ ...p!, factor_conversion: n }))
+                                            }
+                                        }}
                                     />
                                     <p className="text-[10px] text-slate-400 mt-1">
                                         Fracción del producto maestro (ej: 1 galón = 0.02 si 1 tanque = 50 gal)
