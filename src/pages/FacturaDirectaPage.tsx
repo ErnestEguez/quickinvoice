@@ -19,6 +19,7 @@ import {
     Layers,
 } from 'lucide-react'
 import { vendedorService, type Vendedor } from '../services/vendedorService'
+import { precioVolumenService } from '../services/precioVolumenService'
 import { cn } from '../lib/utils'
 
 // ─────────────────────────────────────────────────────
@@ -171,16 +172,24 @@ export function FacturaDirectaPage() {
     const updateLinea = (idx: number, field: keyof DetalleFacturaDirecta, value: any) => {
         setDetalles(prev => prev.map((d, i) => i === idx ? { ...d, [field]: value } : d))
     }
-    const selectProducto = (idx: number, prod: any) => {
+    const selectProducto = async (idx: number, prod: any) => {
         const subsActivos = (prod.subproductos || []).filter((s: any) => s.estado)
         const tieneSubproductos = subsActivos.length > 0
+        const cantidadActual = detalles[idx]?.cantidad || 1
+
+        let precioFinal = prod.precio_venta
+        if (!tieneSubproductos && empresa?.id) {
+            try {
+                const precioVol = await precioVolumenService.resolverPrecio(empresa.id, prod.id, cantidadActual)
+                if (precioVol !== null) precioFinal = precioVol
+            } catch { /* sin rangos activos, usa precio_venta */ }
+        }
 
         setDetalles(prev => prev.map((d, i) => i === idx ? {
             ...d,
             producto_id: prod.id,
-            // Si tiene presentaciones, esperar a que el usuario elija una
             nombre_producto: tieneSubproductos ? '' : prod.nombre,
-            precio_unitario: tieneSubproductos ? 0 : prod.precio_venta,
+            precio_unitario: tieneSubproductos ? 0 : precioFinal,
             iva_porcentaje: prod.iva_porcentaje ?? 15,
             subproducto_id: null,
             factor_conversion: 1,
@@ -593,7 +602,17 @@ export function FacturaDirectaPage() {
                                             <input type="number" min="0.01" step="0.01"
                                                 className="w-full px-3 py-2.5 rounded-lg border border-slate-200 text-base font-bold text-center bg-white outline-none focus:ring-2 focus:ring-primary-400"
                                                 value={det.cantidad}
-                                                onChange={e => updateLinea(idx, 'cantidad', parseFloat(e.target.value) || 0)} />
+                                                onChange={async e => {
+                                                    const nuevaCantidad = parseFloat(e.target.value) || 0
+                                                    updateLinea(idx, 'cantidad', nuevaCantidad)
+                                                    if (det.producto_id && !det.subproducto_id && empresa?.id && nuevaCantidad > 0) {
+                                                        try {
+                                                            const prod = productos.find(p => p.id === det.producto_id)
+                                                            const precioVol = await precioVolumenService.resolverPrecio(empresa.id, det.producto_id, nuevaCantidad)
+                                                            updateLinea(idx, 'precio_unitario', precioVol !== null ? precioVol : (prod?.precio_venta ?? det.precio_unitario))
+                                                        } catch { /* mantener precio actual */ }
+                                                    }
+                                                }} />
                                         </div>
 
                                         {/* Precio Unitario */}

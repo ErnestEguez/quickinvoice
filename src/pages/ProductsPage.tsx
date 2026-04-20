@@ -4,6 +4,7 @@ import type { Producto, Categoria } from '../services/productoService'
 import { subproductoService, type Subproducto } from '../services/subproductoService'
 import { useAuth } from '../contexts/AuthContext'
 import { formatCurrency } from '../lib/utils'
+import { PrecioVolumenModal } from '../components/PrecioVolumenModal'
 import {
     Plus,
     Search,
@@ -15,6 +16,7 @@ import {
     Layers,
     ToggleLeft,
     ToggleRight,
+    TrendingUp,
 } from 'lucide-react'
 
 // ─── Modal de Subproductos ────────────────────────────────────────────────────
@@ -275,6 +277,7 @@ export function ProductsPage() {
     const [isModalOpen, setIsModalOpen] = useState(false)
     const [editingProduct, setEditingProduct] = useState<Partial<Producto> | null>(null)
     const [subproductosProducto, setSubproductosProducto] = useState<(Producto & { id: string }) | null>(null)
+    const [precioVolumenProducto, setPrecioVolumenProducto] = useState<any>(null)
 
     useEffect(() => {
         if (empresa?.id) {
@@ -450,6 +453,13 @@ export function ProductsPage() {
                                                 <Layers className="w-4 h-4" />
                                             </button>
                                             <button
+                                                onClick={() => setPrecioVolumenProducto(producto)}
+                                                className="p-2 hover:bg-violet-50 border border-transparent hover:border-violet-200 rounded-lg text-slate-400 hover:text-violet-600 transition-all"
+                                                title="Precios por volumen"
+                                            >
+                                                <TrendingUp className="w-4 h-4" />
+                                            </button>
+                                            <button
                                                 onClick={() => {
                                                     setEditingProduct(producto)
                                                     setIsModalOpen(true)
@@ -593,6 +603,15 @@ export function ProductsPage() {
                     producto={subproductosProducto}
                     empresaId={empresa.id}
                     onClose={() => setSubproductosProducto(null)}
+                />
+            )}
+
+            {/* Modal Precios por Volumen */}
+            {precioVolumenProducto && empresa?.id && (
+                <PrecioVolumenModal
+                    producto={precioVolumenProducto}
+                    empresaId={empresa.id}
+                    onClose={() => setPrecioVolumenProducto(null)}
                 />
             )}
         </div>
