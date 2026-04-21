@@ -20,6 +20,9 @@ import {
 } from 'lucide-react'
 import { vendedorService, type Vendedor } from '../services/vendedorService'
 import { precioVolumenService } from '../services/precioVolumenService'
+import { catalogCacheService } from '../services/catalogCacheService'
+import { useNetworkStatus } from '../lib/networkStatus'
+import { offlineDb } from '../lib/offlineDb'
 import { cn } from '../lib/utils'
 
 // ─────────────────────────────────────────────────────
@@ -47,6 +50,8 @@ const DETALLE_VACIO: DetalleFacturaDirecta = {
 
 export function FacturaDirectaPage() {
     const { empresa, cajaSesion, profile } = useAuth()
+    const { isOnline } = useNetworkStatus()
+    const [offlineSaved, setOfflineSaved] = useState(false)
 
     // Estado: cliente
     const [clientes, setClientes] = useState<any[]>([])
@@ -101,20 +106,18 @@ export function FacturaDirectaPage() {
 
     async function loadData() {
         try {
-            const [clientsList, prodList, consumidor, vendedoresList] = await Promise.all([
-                facturacionService.getClientes(empresa!.id),
-                supabase
-                    .from('productos')
-                    .select('*, subproductos(*)')
-                    .eq('empresa_id', empresa!.id)
-                    .eq('activo', true)
-                    .order('nombre'),
-                facturacionService.getConsumidorFinal(empresa!.id).catch(() => null),
-                vendedorService.getVendedoresActivos(empresa!.id).catch(() => [])
+            // Use catalog cache (stale-while-revalidate, works offline)
+            const [clientsList, prodList, vendedoresList] = await Promise.all([
+                catalogCacheService.getClientes(empresa!.id),
+                catalogCacheService.getProductos(empresa!.id),
+                isOnline ? vendedorService.getVendedoresActivos(empresa!.id).catch(() => []) : [],
             ])
             setClientes(clientsList)
-            setProductos(prodList.data || [])
+            setProductos(prodList)
             setVendedores(vendedoresList)
+
+            // Consumidor final: buscar en la lista ya cacheada
+            const consumidor = clientsList.find((c: any) => c.identificacion === '9999999999999') ?? null
             if (consumidor) setSelectedCliente(consumidor)
         } catch (e) {
             console.error('Error cargando datos:', e)
@@ -232,12 +235,12 @@ export function FacturaDirectaPage() {
     // ─── FACTURAR ─────────────────────────────────────────
     const handleGenerarFactura = async () => {
         if (!selectedCliente) return alert('Seleccione un cliente')
-        if (!cajaSesion) return alert('No hay una caja abierta. Por favor abra caja primero.')
+        // Permitir sin caja si está offline (se usará la caja cacheada al sincronizar)
+        if (!cajaSesion && isOnline) return alert('No hay una caja abierta. Por favor abra caja primero.')
 
         const detallesValidos = detalles.filter(d => d.nombre_producto && d.cantidad > 0 && d.precio_unitario > 0)
         if (detallesValidos.length === 0) return alert('Agregue al menos un producto o servicio con cantidad y precio')
 
-        // ✅ Validación: el total pagado debe cubrir el total de la factura
         if (totalPagado < totales.total - 0.01) {
             return alert(
                 `El monto distribuido en formas de pago (${formatCurrency(totalPagado)}) ` +
@@ -246,6 +249,38 @@ export function FacturaDirectaPage() {
             )
         }
 
+        // ── Path offline: guardar en cola de sincronización ──────────────────
+        if (!isOnline) {
+            try {
+                setSaving(true)
+                await offlineDb.addToQueue({
+                    id: crypto.randomUUID(),
+                    empresa_id: empresa!.id,
+                    tipo: 'FACTURA_DIRECTA',
+                    estado: 'pendiente',
+                    created_at: new Date().toISOString(),
+                    display_cliente: selectedCliente.nombre,
+                    display_total: totales.total,
+                    payload: {
+                        empresa_id: empresa!.id,
+                        cliente_id: selectedCliente.id,
+                        detalles: detallesValidos,
+                        pagos: pagos.filter(p => p.valor > 0),
+                        caja_sesion_id: cajaSesion?.id ?? null,
+                        vendedor_id: selectedVendedorId || null,
+                        dias_plazo_credito: diasPlazoCredito,
+                    },
+                })
+                setOfflineSaved(true)
+            } catch (e: any) {
+                alert('Error al guardar offline: ' + e.message)
+            } finally {
+                setSaving(false)
+            }
+            return
+        }
+
+        // ── Path online: flujo normal ─────────────────────────────────────────
         try {
             setSaving(true)
             const factura = await facturaDirectaService.generarFacturaDirecta({
@@ -253,12 +288,11 @@ export function FacturaDirectaPage() {
                 cliente_id: selectedCliente.id,
                 detalles: detallesValidos,
                 pagos: pagos.filter(p => p.valor > 0),
-                caja_sesion_id: cajaSesion.id,
+                caja_sesion_id: cajaSesion!.id,
                 vendedor_id: selectedVendedorId || null,
                 dias_plazo_credito: diasPlazoCredito,
             })
 
-            // Cargar factura completa para imprimir automáticamente
             const facturaCompleta = await facturaDirectaService.getComprobanteCompleto(factura.id)
             setFacturaFinal(facturaCompleta)
         } catch (e: any) {
@@ -270,6 +304,7 @@ export function FacturaDirectaPage() {
 
     const handleNuevaFactura = () => {
         setFacturaFinal(null)
+        setOfflineSaved(false)
         setDetalles([{ ...DETALLE_VACIO }])
         setPagos([{ metodo: 'efectivo', valor: 0, referencia: '' }])
         setMontoRecibido(0)
@@ -821,6 +856,35 @@ export function FacturaDirectaPage() {
                     </div>
                 )}
             </div>
+
+            {/* ── MODAL ÉXITO OFFLINE ────────────────────── */}
+            {offlineSaved && (
+                <div className="fixed inset-0 bg-slate-900/90 backdrop-blur-md flex items-center justify-center p-4 z-[60]">
+                    <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-8 space-y-6 animate-in zoom-in-95 duration-300">
+                        <div className="text-center space-y-3">
+                            <div className="w-16 h-16 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto">
+                                <svg className="w-9 h-9" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.111 16.404a5.5 5.5 0 017.778 0M12 20h.01m-7.08-7.071c3.904-3.905 10.236-3.905 14.141 0M1.394 9.393c5.857-5.857 15.355-5.857 21.213 0" />
+                                </svg>
+                            </div>
+                            <h2 className="text-2xl font-black text-slate-900">Factura guardada offline</h2>
+                            <p className="text-slate-500 text-sm">
+                                La factura de <strong>{selectedCliente?.nombre}</strong> por <strong>{formatCurrency(totales.total)}</strong> está en cola.<br />
+                                Se enviará al SRI automáticamente cuando se restablezca la conexión.
+                            </p>
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 text-amber-700 text-xs font-medium">
+                                Verás la factura en estado <strong>PENDIENTE</strong> en la sección de Facturación una vez sincronizada.
+                            </div>
+                        </div>
+                        <button
+                            onClick={handleNuevaFactura}
+                            className="w-full bg-primary-600 text-white py-4 rounded-2xl font-bold hover:bg-primary-700 shadow-xl shadow-primary-200 transition-all"
+                        >
+                            Nueva Factura
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* ── MODAL DE ÉXITO ─────────────────────────── */}
             {facturaFinal && (

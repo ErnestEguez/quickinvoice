@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { offlineDb } from '../lib/offlineDb'
 import type { User } from '@supabase/supabase-js'
 
 export interface Profile {
@@ -111,8 +112,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Avoid fetching if we already have the profile for this user
         if (profile?.id === userId && empresa) {
             console.log('⚡ Profile already loaded for', userId)
-            // Aun asi validamos la caja por si cambio estado
             await validarCaja(userId, empresa.id, profile.rol);
+            setLoading(false)
+            return
+        }
+
+        // ── Offline path: use IndexedDB cache ────────────────────────────────
+        if (!navigator.onLine) {
+            try {
+                console.log('📴 Offline — loading profile from IndexedDB cache')
+                const cachedProfile = await offlineDb.getAppCache<Profile>(`profile:${userId}`)
+                if (cachedProfile) {
+                    setProfile(cachedProfile)
+                    if (cachedProfile.empresa_id) {
+                        const cachedEmpresa = await offlineDb.getAppCache<Empresa>(`empresa:${cachedProfile.empresa_id}`)
+                        if (cachedEmpresa) {
+                            setEmpresa(cachedEmpresa)
+                            const cachedCaja = await offlineDb.getAppCache<any>(`cajaSesion:${cachedProfile.empresa_id}`)
+                            if (cachedCaja) setCajaSesion(cachedCaja)
+                        }
+                    }
+                    setLoading(false)
+                    return
+                }
+                console.warn('📴 Offline — no cached profile found for user', userId)
+            } catch (cacheErr) {
+                console.warn('Error reading offline cache:', cacheErr)
+            }
             setLoading(false)
             return
         }
@@ -142,6 +168,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             const data = profileData || {}
             console.log('✅ Profile loaded:', data.rol);
             setProfile(data)
+            // Persist profile for offline use
+            offlineDb.setAppCache(`profile:${userId}`, data).catch(() => {})
 
             if (data.empresa_id) {
                 const { data: empresaData, error: empresaError } = await supabase
@@ -152,6 +180,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
                 if (!empresaError && empresaData) {
                     setEmpresa(empresaData)
+                    // Persist empresa for offline use
+                    offlineDb.setAppCache(`empresa:${empresaData.id}`, empresaData).catch(() => {})
                     await validarCaja(userId, data.empresa_id, data.rol);
                 } else {
                     console.error('❌ Empresa Fetch Error:', empresaError)
@@ -189,21 +219,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     console.log('✅ Caja abierta propia encontrada');
                     setCajaSesion(cajaAbierta);
                     setCajaBloqueada(null);
+                    offlineDb.setAppCache(`cajaSesion:${empresaId}`, cajaAbierta).catch(() => {})
                 } else if (esRolOficina) {
-                    // Oficina ve caja de otro usuario: la toma como referencia y NO se bloquea
                     console.log('ℹ️ Caja abierta por otro usuario, rol oficina puede continuar');
                     setCajaSesion(cajaAbierta);
                     setCajaBloqueada(null);
+                    offlineDb.setAppCache(`cajaSesion:${empresaId}`, cajaAbierta).catch(() => {})
                 } else {
-                    // Mesero/cocina: hay una caja abierta (de oficina), pueden operar
                     console.log('✅ Mesero/cocina: caja de oficina disponible');
                     setCajaSesion(cajaAbierta);
                     setCajaBloqueada(null);
+                    offlineDb.setAppCache(`cajaSesion:${empresaId}`, cajaAbierta).catch(() => {})
                 }
             } else {
-                // No hay ninguna caja abierta
                 if (esRolOficina) {
-                    // Solo oficina abre la caja automáticamente
                     console.log('✨ Oficina: abriendo nueva caja para:', userId);
                     const { data: nuevaCaja, error: errorInsert } = await supabase
                         .from('caja_sesiones')
@@ -222,6 +251,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
                     } else {
                         setCajaSesion(nuevaCaja);
                         setCajaBloqueada(null);
+                        offlineDb.setAppCache(`cajaSesion:${empresaId}`, nuevaCaja).catch(() => {})
                     }
                 } else if (esRolOperativo) {
                     // Mesero/cocina NO puede abrir caja. Debe esperar que oficina la abra.

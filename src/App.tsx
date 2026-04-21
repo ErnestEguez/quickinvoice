@@ -2,6 +2,8 @@ import React from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { OfflineBanner } from './components/OfflineBanner'
+import { useOfflineSync } from './hooks/useOfflineSync'
 import { Layout } from './components/Layout'
 import { LoginPage } from './pages/LoginPage'
 import { Dashboard } from './pages/Dashboard'
@@ -31,6 +33,12 @@ import { NuevaNcPage } from './pages/NuevaNcPage'
 import { NcRidePage } from './pages/NcRidePage'
 import { DashboardGerencialPage } from './pages/DashboardGerencialPage'
 import { ProtectedRoute as RoleProtectedRoute } from './components/ProtectedRoute'
+
+// Monta el sync en background sin afectar el árbol de rutas
+function SyncManager() {
+  useOfflineSync()
+  return null
+}
 
 // Componente para proteger rutas (Auth simple)
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -78,6 +86,8 @@ function App() {
     <ErrorBoundary>
       <BrowserRouter>
         <AuthProvider>
+          <SyncManager />
+          <OfflineBanner />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
 

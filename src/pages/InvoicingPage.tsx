@@ -6,6 +6,7 @@ import type { SriConfig } from '../services/facturacionService'
 import type { Comprobante } from '../services/sriService'
 import { supabase } from '../lib/supabase'
 import { formatCurrency, cn } from '../lib/utils'
+import { offlineDb, type SyncQueueItem } from '../lib/offlineDb'
 import {
     FileText,
     Send,
@@ -21,7 +22,9 @@ import {
     RotateCw,
     Printer,
     Mail,
-    Ban
+    Ban,
+    WifiOff,
+    AlertTriangle,
 } from 'lucide-react'
 import { format } from 'date-fns'
 
@@ -30,8 +33,9 @@ import { useAuth } from '../contexts/AuthContext'
 export function InvoicingPage() {
     const { empresa, profile } = useAuth()
     const [comprobantes, setComprobantes] = useState<Comprobante[]>([])
+    const [offlineQueue, setOfflineQueue] = useState<SyncQueueItem[]>([])
     const [loading, setLoading] = useState(true)
-    const [anulando, setAnulando] = useState<string | null>(null) // id del comprobante
+    const [anulando, setAnulando] = useState<string | null>(null)
     const [search, setSearch] = useState('')
     const [isConfigModalOpen, setIsConfigModalOpen] = useState(false)
     const [sriConfig, setSriConfig] = useState<Partial<SriConfig>>({})
@@ -48,6 +52,11 @@ export function InvoicingPage() {
     async function loadData() {
         try {
             setLoading(true)
+            // Load offline queue for this empresa (always, regardless of connectivity)
+            offlineDb.getQueueByEmpresa(empresa!.id)
+                .then(setOfflineQueue)
+                .catch(() => {})
+
             const [docsData, configData] = await Promise.all([
                 sriService.getComprobantes(empresa!.id, selectedDate),
                 facturacionService.getSriConfig(empresa!.id)
@@ -171,6 +180,62 @@ export function InvoicingPage() {
                     </div>
                 ))}
             </div>
+
+            {/* ── Cola offline ─────────────────────────────────── */}
+            {offlineQueue.length > 0 && (
+                <div className="rounded-2xl border border-amber-200 bg-amber-50 overflow-hidden">
+                    <div className="px-5 py-3 border-b border-amber-200 flex items-center gap-2">
+                        <WifiOff className="w-4 h-4 text-amber-600" />
+                        <span className="text-sm font-black text-amber-800 uppercase tracking-wide">
+                            Facturas pendientes de sincronización ({offlineQueue.length})
+                        </span>
+                    </div>
+                    <table className="w-full text-left text-sm">
+                        <thead>
+                            <tr className="bg-amber-100/60 text-[10px] uppercase tracking-widest text-amber-700">
+                                <th className="px-5 py-2 font-medium">Cliente</th>
+                                <th className="px-5 py-2 font-medium">Guardada</th>
+                                <th className="px-5 py-2 font-medium text-right">Total</th>
+                                <th className="px-5 py-2 font-medium text-center">Estado</th>
+                                <th className="px-5 py-2 font-medium">Error</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-amber-100">
+                            {offlineQueue.map(item => (
+                                <tr key={item.id} className="hover:bg-amber-100/40">
+                                    <td className="px-5 py-3 font-medium text-slate-800">{item.display_cliente}</td>
+                                    <td className="px-5 py-3 text-slate-500 text-xs">
+                                        {format(new Date(item.created_at), 'dd/MM/yyyy HH:mm')}
+                                    </td>
+                                    <td className="px-5 py-3 font-bold text-slate-900 text-right">
+                                        {formatCurrency(item.display_total)}
+                                    </td>
+                                    <td className="px-5 py-3 text-center">
+                                        {item.estado === 'pendiente' && (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-200 text-amber-800">
+                                                <Clock className="w-3 h-3" /> PENDIENTE
+                                            </span>
+                                        )}
+                                        {item.estado === 'procesando' && (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700">
+                                                <RotateCw className="w-3 h-3 animate-spin" /> SINCRONIZANDO
+                                            </span>
+                                        )}
+                                        {item.estado === 'error_permanente' && (
+                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
+                                                <AlertTriangle className="w-3 h-3" /> ERROR
+                                            </span>
+                                        )}
+                                    </td>
+                                    <td className="px-5 py-3 text-xs text-red-500 max-w-xs truncate" title={item.ultimo_error ?? ''}>
+                                        {item.ultimo_error ?? '—'}
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+            )}
 
             <div className="card shadow-sm border border-slate-100 overflow-hidden">
                 <div className="p-4 border-b border-slate-100 flex flex-col md:flex-row gap-4 bg-white">
