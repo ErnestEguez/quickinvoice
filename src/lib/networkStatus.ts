@@ -14,28 +14,24 @@ function notify(online: boolean) {
 async function pingSupabase(): Promise<boolean> {
     try {
         const url = import.meta.env.VITE_SUPABASE_URL as string
-        const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string
-        if (!url || !key) return false
-        const res = await fetch(`${url}/rest/v1/`, {
+        if (!url) return false
+        // Any HTTP response (200, 400, 401…) means we can reach the server.
+        // Only a network-level error (TypeError) means we're truly offline.
+        await fetch(`${url}/rest/v1/`, {
             method: 'HEAD',
-            headers: { apikey: key },
             signal: AbortSignal.timeout(4000),
         })
-        return res.ok || res.status === 400 // 400 = reachable (missing table param)
+        return true
     } catch {
         return false
     }
 }
 
-// Verify real connectivity on startup
-if (navigator.onLine) {
-    pingSupabase().then(real => {
-        if (_isOnline !== real) notify(real)
-    })
-}
+// No startup ping — trust navigator.onLine for initial state.
+// A false startup ping was overriding a valid online state.
 
 window.addEventListener('online', () => {
-    // Don't announce online until the ping confirms real WAN access
+    // Verify real WAN access before announcing we're back online
     pingSupabase().then(real => notify(real))
 })
 

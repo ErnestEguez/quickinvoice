@@ -35,7 +35,8 @@
 14. [Cierres de Caja](#14-cierres-de-caja)
 15. [Consultas e Informes](#15-consultas-e-informes)
 16. [Configuración](#16-configuración)
-17. [Preguntas frecuentes](#17-preguntas-frecuentes)
+17. [Modo Offline — Facturación sin internet](#17-modo-offline--facturación-sin-internet)
+18. [Preguntas frecuentes](#18-preguntas-frecuentes)
 
 ---
 
@@ -124,8 +125,10 @@ Después de facturar aparecen dos opciones de impresión:
 | Estado SRI | Significado |
 |-----------|-------------|
 | AUTORIZADO | El SRI autorizó el comprobante — es válido |
-| PENDIENTE | Enviado, esperando respuesta del SRI |
+| PENDIENTE | Enviado, esperando respuesta del SRI — o guardado offline para enviar al reconectarse |
 | RECHAZADO | El SRI rechazó el comprobante — revisar error |
+
+> **Modo offline:** Si pierde internet mientras factura, el sistema guarda la factura localmente y la envía al SRI en cuanto recupere la conexión. Vea la sección [17. Modo Offline](#17-modo-offline--facturación-sin-internet) para más detalles.
 
 ### 3.4 Reintentar autorización
 
@@ -197,6 +200,42 @@ Menú: **Productos**
 ### 6.2 Control de stock
 
 El stock se actualiza automáticamente con cada factura emitida. Para ajustes manuales use el módulo de **Ingreso de Compras**.
+
+### 6.3 Precios por Volumen
+
+QuickInvoice permite configurar rangos de precios especiales que se aplican automáticamente según la cantidad vendida.
+
+> **Imagen sugerida:** `06b_precio-volumen.png` — modal de precios por volumen
+
+**¿Cómo funciona?**
+
+Cuando el vendedor ingresa una cantidad en la factura, el sistema busca si existe un rango activo para ese producto y cantidad. Si lo encuentra, reemplaza automáticamente el precio de lista por el precio especial.
+
+**Configurar precios por volumen:**
+
+1. Vaya a **Productos**.
+2. En la fila del producto, haga clic en el ícono de tendencia (gráfico de barras, color violeta).
+3. Se abre el modal **Precios por Volumen**.
+4. Haga clic en **Agregar Rango**.
+5. Ingrese:
+   - **Desde** — cantidad mínima (ej: 10)
+   - **Hasta** — cantidad máxima (ej: 49)
+   - **Precio** — precio unitario sin IVA para ese rango
+6. Haga clic en **Guardar**.
+
+**Ejemplo:**
+
+| Desde | Hasta | Precio unitario |
+|-------|-------|-----------------|
+| 1 | 9 | (precio de lista) |
+| 10 | 49 | $8.50 |
+| 50 | 999 | $7.00 |
+
+> **Nota:** Los rangos no deben solaparse. El sistema valida esto al guardar y avisa si hay conflicto.
+
+**Activar / desactivar un rango:**
+
+Use el ícono de palanca en cada fila para activar o desactivar un rango sin eliminarlo. Los rangos inactivos no se aplican en la facturación.
 
 ---
 
@@ -584,7 +623,96 @@ El campo **Secuencial Inicial Facturas** define desde qué número inicia la sec
 
 ---
 
-## 17. Preguntas frecuentes
+## 17. Modo Offline — Facturación sin internet
+
+QuickInvoice puede seguir emitiendo facturas aunque se corte el internet. Las facturas se guardan localmente y se envían al SRI en cuanto se restablece la conexión.
+
+> **Imagen sugerida:** `17_offline-banner.png` — banner de modo offline en la parte superior de la pantalla
+
+### 17.1 ¿Qué funciona sin internet?
+
+| Función | Sin internet |
+|---------|-------------|
+| Emitir facturas | ✅ Sí (se guardan localmente) |
+| Ver lista de clientes | ✅ Sí (caché local) |
+| Ver lista de productos | ✅ Sí (caché local) |
+| Crear cliente nuevo | ✅ Sí |
+| Autorización SRI | ❌ No (se hace al reconectarse) |
+| Cartera CxC (abonos, cobros) | ❌ No |
+| Ingreso de compras | ❌ No |
+| Reportes y consultas | ❌ No |
+
+### 17.2 Banner de modo offline
+
+Cuando el sistema detecta que no hay internet, aparece un **banner ámbar** en la parte superior de la pantalla:
+
+> **Sin conexión · Modo offline** — Las facturas se guardarán localmente y se enviarán al SRI al reconectarse.
+
+Mientras el banner esté visible, puede seguir operando con normalidad. Las facturas que emita quedarán en cola.
+
+### 17.3 Emitir una factura sin internet
+
+El proceso es idéntico al normal:
+
+1. Vaya a **Facturación → Nueva Factura**.
+2. Seleccione el cliente y agregue productos.
+3. Elija la forma de pago y haga clic en **Emitir Factura**.
+4. Aparecerá una confirmación ámbar: **"Factura guardada offline"**.
+
+La factura queda guardada localmente con estado **PENDIENTE** hasta que el sistema la envíe al SRI.
+
+> **Importante:** Las facturas offline no tienen número de autorización SRI hasta que se sincronicen. No entregue el RIDE al cliente hasta que el estado cambie a AUTORIZADO.
+
+### 17.4 Sincronización automática
+
+En cuanto el sistema detecta que recuperó internet:
+
+1. El banner cambia a azul: **"Sincronizando facturas pendientes..."**
+2. El sistema envía las facturas en orden (la más antigua primero).
+3. Cada factura que se autoriza cambia su estado a **AUTORIZADO** en Comprobantes.
+4. El banner desaparece cuando no quedan pendientes.
+
+### 17.5 Ver facturas pendientes de sincronizar
+
+En la pantalla de **Comprobantes** (Facturación) aparece una sección ámbar en la parte superior con las facturas que están esperando sincronizarse. Para cada una puede ver:
+
+- Nombre del cliente
+- Fecha y hora en que se guardó
+- Total de la factura
+- Estado actual
+
+**Acciones disponibles:**
+
+| Botón | Acción |
+|-------|--------|
+| Reintentar (ícono ↺) | Vuelve a intentar enviar al SRI manualmente |
+| Descartar (ícono ✕) | Elimina la factura offline (se le pedirá confirmación) |
+
+> **Imagen sugerida:** `17b_offline-queue.png` — sección de facturas pendientes en Comprobantes
+
+### 17.6 Errores permanentes
+
+Si después de 3 intentos el sistema no puede enviar una factura al SRI, la marca como **Error permanente** (badge rojo). Esto puede ocurrir si:
+
+- Los datos del cliente o empresa no son válidos para el SRI.
+- El certificado digital (.p12) está vencido.
+- Hay un problema de configuración SRI.
+
+En este caso, use el botón **Reintentar** después de corregir el problema, o **Descartar** si la factura no debe emitirse.
+
+### 17.7 Actualizar el catálogo de clientes
+
+El catálogo de clientes se guarda en caché por **15 minutos**. Si creó un cliente nuevo en otro equipo y no aparece, use el botón de recarga (ícono ↺) que está junto al selector de cliente en la pantalla de facturación.
+
+> **Nota:** El botón de recarga solo aparece cuando hay conexión a internet.
+
+### 17.8 Actualizar el catálogo de productos
+
+El catálogo de productos se guarda en caché por **45 minutos**. Si agrega productos nuevos y no aparecen en la factura, espere a que expire el caché o recargue la página con internet.
+
+---
+
+## 18. Preguntas frecuentes
 
 ### ¿Por qué mi factura quedó en estado PENDIENTE?
 
@@ -592,7 +720,7 @@ El SRI puede tardar unos segundos en procesar. Use el botón de reintento en **C
 
 ### ¿Puedo emitir facturas si el internet se corta?
 
-No. QuickInvoice requiere conexión a internet para enviar los comprobantes al SRI en tiempo real.
+Sí. QuickInvoice tiene **modo offline**: las facturas se guardan localmente y se envían automáticamente al SRI cuando se recupera la conexión. Vea la sección [17. Modo Offline](#17-modo-offline--facturación-sin-internet) para todos los detalles.
 
 ### ¿Cómo anulo una factura en el SRI?
 

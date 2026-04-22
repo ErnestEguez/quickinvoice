@@ -16,7 +16,7 @@ import {
     Search, UserPlus, Plus, Trash2, X, Save,
     CheckCircle2, Loader2, FilePlus, CreditCard,
     Package, Printer, User, Briefcase, ChevronDown, ChevronUp,
-    Layers,
+    Layers, RotateCw,
 } from 'lucide-react'
 import { vendedorService, type Vendedor } from '../services/vendedorService'
 import { precioVolumenService } from '../services/precioVolumenService'
@@ -158,7 +158,9 @@ export function FacturaDirectaPage() {
         try {
             setIsSavingClient(true)
             const created = await facturacionService.createCliente({ ...newClient, empresa_id: empresa!.id })
-            setClientes(prev => [...prev, created])
+            // Refresh full catalog cache so the new client is available offline
+            const fresh = await catalogCacheService.forceRefreshClientes(empresa!.id).catch(() => null)
+            setClientes(fresh ?? (prev => [...prev, created]))
             setSelectedCliente(created)
             setIsClientFormOpen(false)
             setNewClient({ identificacion: '', nombre: '', email: '', direccion: '', telefono: '' })
@@ -166,6 +168,20 @@ export function FacturaDirectaPage() {
             alert('Error al guardar cliente')
         } finally {
             setIsSavingClient(false)
+        }
+    }
+
+    const [refreshingClientes, setRefreshingClientes] = useState(false)
+    const handleForceRefreshClientes = async () => {
+        if (!empresa?.id || !isOnline) return
+        setRefreshingClientes(true)
+        try {
+            const fresh = await catalogCacheService.forceRefreshClientes(empresa.id)
+            setClientes(fresh)
+        } catch {
+            alert('No se pudo actualizar la lista de clientes')
+        } finally {
+            setRefreshingClientes(false)
         }
     }
 
@@ -356,6 +372,16 @@ export function FacturaDirectaPage() {
                                 )}
                             </h2>
                             <div className="flex items-center gap-3">
+                                {!clienteCollapsed && !isClientFormOpen && isOnline && (
+                                    <button
+                                        onClick={e => { e.stopPropagation(); handleForceRefreshClientes() }}
+                                        disabled={refreshingClientes}
+                                        className="text-slate-400 hover:text-primary-600 flex items-center gap-1 text-xs font-bold disabled:opacity-40"
+                                        title="Actualizar lista desde servidor"
+                                    >
+                                        <RotateCw className={cn('w-3.5 h-3.5', refreshingClientes && 'animate-spin')} />
+                                    </button>
+                                )}
                                 {!clienteCollapsed && !isClientFormOpen && (
                                     <button onClick={e => { e.stopPropagation(); setIsClientFormOpen(true) }}
                                         className="text-primary-600 hover:text-primary-700 flex items-center gap-1 text-xs font-bold">
